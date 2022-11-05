@@ -1,0 +1,11 @@
+[package]
+name = "skullgame"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = {version = "1.0", features = ["derive"] }
+
+[dependencies.uuid]
+version = "1.2"
+features = ["serde", "v4", "macro-diagnostics"]

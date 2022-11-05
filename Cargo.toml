@@ -1,0 +1,21 @@
+[workspace]
+members = [".", "skullgame", "wasm"]
+
+[package]
+name = "webskull"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = {version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+warp = "0.3"
+tokio = { version = "1.0", features = ["full"] }
+pretty_env_logger = "0.4"
+futures = { version = "0.3", default-features = false }
+futures-util = "0.3"
+log = "0.4"
+secrets = "1.2.0"
+
+[dependencies.skullgame]
+path = "./skullgame"
