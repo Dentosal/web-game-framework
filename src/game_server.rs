@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 
 use futures::stream::SplitSink;
@@ -7,22 +9,34 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use warp::ws::{Message, WebSocket};
 
-use skullgame::protocol::{self, ClientMessage, GameId, GameInfo, PlayerId, PlayerInfo};
-use skullgame::rules::GamePrivate;
+use skullgame::protocol::{self, ClientMessage, GameId, GameInfo, PlayerId, ServerMessage};
+use skullgame::rules::{GamePrivate, GamePublic, PlayerPrivate};
 use skullgame::Uuid;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ClientId(Uuid);
+impl ClientId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
 
 #[derive(Debug)]
 enum Event {
     Connected {
-        client_id: Uuid,
+        client_id: ClientId,
         tx: SplitSink<WebSocket, Message>,
     },
     Disconnected {
-        client_id: Uuid,
+        client_id: ClientId,
     },
     Message {
-        client_id: Uuid,
+        client_id: ClientId,
         payload: protocol::ClientMessage,
+    },
+    InvalidMessage {
+        client_id: ClientId,
+        error: serde_json::Error,
     },
 }
 
@@ -30,73 +44,239 @@ pub fn spawn() -> (JoinHandle<()>, ServerRemote) {
     let (event_tx, event_rx) = mpsc::channel(64);
 
     let jh = tokio::spawn(async {
-        game_server(event_rx).await;
+        GameServer::new().run(event_rx).await;
     });
 
     (jh, ServerRemote { event_tx })
 }
 
 struct Player {
-    info: PlayerInfo,
+    name: String,
     tx: SplitSink<WebSocket, Message>,
+}
+
+pub enum GameState {
+    Waiting,
+    Running {
+        player_order: Vec<PlayerId>,
+        state: GamePrivate,
+    },
 }
 
 pub struct Game {
     pub leader: PlayerId,
-    pub players: Vec<PlayerId>,
-    pub state: Option<GamePrivate>,
+    pub players: HashSet<PlayerId>,
+    pub state: GameState,
+}
+impl Game {
+    pub fn state_for(&self, player: &PlayerId) -> Option<(GamePublic, PlayerPrivate)> {
+        match &self.state {
+            GameState::Waiting => None,
+            GameState::Running {
+                player_order,
+                state,
+            } => {
+                let i = player_order.iter().position(|p| p == player)?;
+                Some(state.for_player(i))
+            }
+        }
+    }
+
+    pub fn try_remove_player(&mut self, player: &PlayerId) -> bool {
+        let removed = self.players.remove(player);
+        if !removed {
+            return false;
+        }
+
+        // Assign a "random" leader
+        if *player == self.leader {
+            let new_leader = self
+                .players
+                .iter()
+                .next()
+                .copied()
+                .unwrap_or_else(|| PlayerId::new());
+            self.leader = new_leader;
+        }
+
+        true
+    }
+
+    pub fn start(&mut self) {
+        let mut player_order: Vec<_> = self.players.iter().copied().collect();
+        let mut rng = thread_rng();
+        player_order.shuffle(&mut rng);
+        let player_count = player_order.len();
+        self.state = GameState::Running {
+            player_order,
+            state: GamePrivate::new(player_count),
+        }
+    }
 }
 
-async fn game_server(mut event_rx: mpsc::Receiver<Event>) {
-    let mut players: HashMap<Uuid, Player> = HashMap::new();
-    let mut games: HashMap<GameId, Game> = HashMap::new();
+struct GameServer {
+    clients: HashMap<ClientId, PlayerId>,
+    players: HashMap<PlayerId, Player>,
+    games: HashMap<GameId, Game>,
+}
+impl GameServer {
+    pub fn new() -> Self {
+        Self {
+            clients: HashMap::new(),
+            players: HashMap::new(),
+            games: HashMap::new(),
+        }
+    }
 
-    while let Some(event) = event_rx.recv().await {
-        log::debug!("Event: {:?}", event);
+    async fn broadcast_game_state(&mut self, game_id: GameId) {
+        let game = self.games.get(&game_id).unwrap();
 
-        match event {
-            Event::Connected { client_id, tx } => {
-                let old = players.insert(
-                    client_id,
-                    Player {
-                        info: PlayerInfo {
-                            id: PlayerId::new(),
-                            name: "Anonymous".to_owned(),
-                        },
-                        tx,
-                    },
-                );
-                debug_assert!(old.is_none(), "The client id should never conflict");
-            }
-            Event::Disconnected { client_id } => todo!(),
-            Event::Message { client_id, payload } => match payload {
-                ClientMessage::Identify { .. } => todo!("Identify"),
-                ClientMessage::SetName(name) => {
-                    players.get_mut(&client_id).unwrap().info.name = name;
+        for player_id in game.players.iter() {
+            let (state, player_state) = match game.state_for(&player_id) {
+                Some((a, b)) => (Some(a), Some(b)),
+                None => (None, None),
+            };
+
+            let players: Vec<PlayerId> = match &game.state {
+                GameState::Waiting => {
+                    let mut players: Vec<_> = game.players.iter().copied().collect();
+                    players.sort();
+                    players
                 }
-                ClientMessage::CreateGame => {
-                    let player = players.get_mut(&client_id).unwrap();
+                GameState::Running { player_order, .. } => {
+                    let mut not_in_game: Vec<PlayerId> = game
+                        .players
+                        .iter()
+                        .copied()
+                        .filter(|p| !player_order.contains(&p))
+                        .collect();
+                    not_in_game.sort();
+                    player_order.iter().copied().chain(not_in_game).collect()
+                }
+            };
 
-                    let game_id = GameId::new();
-                    games.insert(
-                        game_id,
-                        Game {
-                            leader: player.info.id,
-                            players: vec![player.info.id],
-                            state: None,
+            let response = serde_json::to_string(&protocol::ServerMessage::GameInfo {
+                id: game_id,
+                info: GameInfo {
+                    you: *player_id,
+                    leader: game.leader,
+                    player_names: game
+                        .players
+                        .iter()
+                        .map(|p_id| {
+                            let p = self.players.get(p_id).unwrap();
+                            (*p_id, p.name.clone())
+                        })
+                        .collect(),
+                    players,
+                    state,
+                    player_state,
+                },
+            })
+            .unwrap();
+
+            let player = self.players.get_mut(&player_id).unwrap();
+            let _ = player.tx.send(Message::text(response)).await;
+        }
+    }
+
+    async fn run(mut self, mut event_rx: mpsc::Receiver<Event>) {
+        while let Some(event) = event_rx.recv().await {
+            log::debug!("Event: {:?}", event);
+
+            match event {
+                Event::Connected { client_id, mut tx } => {
+                    let response = serde_json::to_string(&ServerMessage::ServerInfo {
+                        version: env!("CARGO_PKG_VERSION").to_owned(),
+                    })
+                    .unwrap();
+                    tx.send(Message::text(response)).await.unwrap();
+
+                    let player_id = PlayerId::new();
+
+                    let old = self.clients.insert(client_id, player_id);
+                    debug_assert!(old.is_none(), "The client id should never conflict");
+                    let old = self.players.insert(
+                        player_id,
+                        Player {
+                            name: "Anonymous".to_owned(),
+                            tx,
                         },
                     );
-                    let response =
-                        serde_json::to_string(&protocol::ServerMessage::GameCreated(game_id))
-                            .unwrap();
+                    debug_assert!(old.is_none(), "The client id should never conflict");
+                }
+                Event::Disconnected { client_id } => {
+                    let player_id = self.clients.remove(&client_id).unwrap();
+                    let _ = self.players.remove(&player_id).unwrap();
+                    let affected_games: HashSet<GameId> = self
+                        .games
+                        .iter_mut()
+                        .filter_map(|(game_id, game)| {
+                            if game.try_remove_player(&player_id) {
+                                Some(*game_id)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    for game_id in affected_games {
+                        self.broadcast_game_state(game_id).await;
+                    }
+                }
+                Event::InvalidMessage { client_id, error } => {
+                    let player_id = self.clients.get(&client_id).unwrap();
+                    let player = self.players.get_mut(&player_id).unwrap();
+
+                    let response = serde_json::to_string(&protocol::ServerMessage::Error {
+                        message: format!("{}", error),
+                    })
+                    .unwrap();
                     player.tx.send(Message::text(response)).await.unwrap();
                 }
-                ClientMessage::JoinGame(_) => todo!("JoinGame"),
-                ClientMessage::LeaveGame => todo!("LeaveGame"),
-                ClientMessage::KickPlayer(_) => todo!("KickPlayer"),
-                ClientMessage::StartGame(_) => todo!("StartGame"),
-                ClientMessage::Play(_) => todo!("Play"),
-            },
+                Event::Message { client_id, payload } => match payload {
+                    ClientMessage::Identify { .. } => todo!("Identify"),
+                    ClientMessage::SetName(name) => {
+                        let player_id = self.clients.get(&client_id).unwrap();
+                        self.players.get_mut(&player_id).unwrap().name = name;
+                    }
+                    ClientMessage::JoinGame(game_id) => {
+                        let player_id = *self.clients.get(&client_id).unwrap();
+
+                        let game_id = game_id.unwrap_or(GameId::new());
+                        let game = self.games.entry(game_id).or_insert_with(|| Game {
+                            leader: player_id,
+                            players: HashSet::new(),
+                            state: GameState::Waiting,
+                        });
+                        game.players.insert(player_id);
+                        self.broadcast_game_state(game_id).await;
+                    }
+                    ClientMessage::LeaveGame => todo!("LeaveGame"),
+                    ClientMessage::KickPlayer(_) => todo!("KickPlayer"),
+                    ClientMessage::PromoteLeader(_) => todo!("PromoteLeader"),
+                    ClientMessage::StartGame => {
+                        let player_id = self.clients.get(&client_id).unwrap();
+                        let Some((game_id, game)) = self.games.iter_mut().find(|(_, g)| g.players.contains(player_id)) else {
+                            log::warn!("Player trying to start a game, but not in any lobby");
+                            continue;
+                        };
+                        if game.players.len() < 2 {
+                            log::warn!("Trying to start a game with not enough players");
+                            continue;
+                        }
+                        if !matches!(game.state, GameState::Waiting) {
+                            log::warn!("Trying to start a game that has already started");
+                            continue;
+                        }
+                        game.start();
+                        let game_id = *game_id;
+                        drop(game);
+                        self.broadcast_game_state(game_id).await;
+                    }
+                    ClientMessage::Play(_) => todo!("Play"),
+                },
+            }
         }
     }
 }
@@ -122,7 +302,7 @@ pub struct ClientHandle {
 
 impl ClientHandle {
     pub async fn handle_ws_client(self, websocket: WebSocket) {
-        let client_id = Uuid::new_v4();
+        let client_id = ClientId::new();
         log::debug!(
             "New connection from {:?} with client id {:?}",
             self.peer_addr,
@@ -148,12 +328,20 @@ impl ClientHandle {
 
             // Skip non-text messages
             if let Ok(msg) = message.to_str() {
-                let payload: protocol::ClientMessage = serde_json::from_str(&msg).unwrap();
-                self.server
-                    .event_tx
-                    .send(Event::Message { client_id, payload })
-                    .await
-                    .unwrap();
+                match serde_json::from_str::<protocol::ClientMessage>(&msg) {
+                    Ok(payload) => self
+                        .server
+                        .event_tx
+                        .send(Event::Message { client_id, payload })
+                        .await
+                        .unwrap(),
+                    Err(error) => self
+                        .server
+                        .event_tx
+                        .send(Event::InvalidMessage { client_id, error })
+                        .await
+                        .unwrap(),
+                }
             }
         }
 

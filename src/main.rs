@@ -1,4 +1,5 @@
 #![deny(unused_must_use)]
+#![feature(hash_drain_filter)]
 
 use std::net::SocketAddr;
 
@@ -16,7 +17,9 @@ async fn main() {
         .and(warp::path::end())
         .and(warp::fs::file("./static/index.html"));
 
-    let wasm_pkg = warp::path("wasm").and(warp::fs::dir("./wasm/pkg/"));
+    let favicon = warp::get()
+        .and(warp::path("favicon.ico"))
+        .and(warp::fs::file("./static/images/favicon.ico"));
 
     let static_files = warp::path("static").and(warp::fs::dir("./static/"));
 
@@ -27,7 +30,7 @@ async fn main() {
         .and(with_game_server(game_server_handle))
         .map(|ws: warp::ws::Ws, ch: ClientHandle| ws.on_upgrade(|s| ch.handle_ws_client(s)));
 
-    warp::serve(index.or(wasm_pkg).or(static_files).or(ws))
+    warp::serve(index.or(favicon).or(static_files).or(ws))
         .run(([127, 0, 0, 1], 3030))
         .await;
 

@@ -7,26 +7,47 @@ pub enum Tile {
 }
 
 type TileCount = usize;
-type PlayerIndex = usize;
 
 /// Full game information
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GamePrivate {
     players: Vec<PlayerPrivate>,
-    turn: PlayerIndex,
     actions: Vec<ActionPrivate>,
+}
+impl GamePrivate {
+    pub fn new(player_count: usize) -> Self {
+        Self {
+            players: vec![
+                PlayerPrivate {
+                    has_point: false,
+                    tiles: 4,
+                    has_skull: true,
+                    skull_known: true,
+                };
+                player_count
+            ],
+            actions: Vec::new(),
+        }
+    }
+
+    pub fn for_player(&self, player: usize) -> (GamePublic, PlayerPrivate) {
+        (
+            GamePublic {
+                players: self.players.iter().map(|p| p.public()).collect(),
+                actions: self.actions.iter().map(|p| p.public()).collect(),
+            },
+            self.players[player],
+        )
+    }
 }
 
 /// Fully public game information
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct GamePublic {
     players: Vec<PlayerPublic>,
-    turn: PlayerIndex,
     actions: Vec<ActionPublic>,
 }
-impl GamePublic {
-
-}
+impl GamePublic {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PlayerPrivate {
@@ -60,14 +81,14 @@ pub struct PlayerPublic {
 pub enum ActionPublic {
     Place,
     Challenge(Option<TileCount>),
-    Reveal(PlayerIndex),
+    Reveal(usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ActionPrivate {
     Place(Tile),
     Challenge(Option<TileCount>),
-    Reveal(PlayerIndex),
+    Reveal(usize),
 }
 impl ActionPrivate {
     pub fn public(self) -> ActionPublic {
