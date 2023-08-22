@@ -18,6 +18,16 @@ struct ChatMessage {
     pub text: String,
 }
 
+/// Message sent by the client
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum UserMessage {
+    /// Send a chat message
+    Chat(String),
+    /// Change the title of the chat
+    Title(String),
+}
+
 impl Game for Chat {
     fn public_state(&self) -> serde_json::Value {
         serde_json::to_value(self).unwrap()
@@ -53,11 +63,18 @@ impl Game for Chat {
         player: PlayerId,
         message: serde_json::Value,
     ) -> Result<serde_json::Value, serde_json::Value> {
-        if let Some(text) = message.as_str() {
-            self.messages.push(ChatMessage {
-                sender: Some(player),
-                text: text.to_string(),
-            });
+        if let Ok(msg) = serde_json::from_value(message) {
+            match msg {
+                UserMessage::Chat(text) => {
+                    self.messages.push(ChatMessage {
+                        sender: Some(player),
+                        text: text.to_string(),
+                    });
+                }
+                UserMessage::Title(title) => {
+                    self.title = title;
+                }
+            }
             Ok(().into())
         } else {
             Err("Invalid message!!".into())

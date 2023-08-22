@@ -1,7 +1,7 @@
-const main = WgfwEvents => {
-    document.getElementById("global-banner").innerHTML = "Connecting to server...";
+const main = () => {
+    // document.getElementById("global-banner").innerHTML = "Connecting to server...";
 
-    let events = new WgfwEvents();
+    let events = new window.WgfwEvents();
 
     events.onready = async () => {
         console.log("onready");
@@ -14,8 +14,8 @@ const main = WgfwEvents => {
         console.log("inner", inner);
     };
 
-    events.onupdate = (gameId, leader, players, public, _private) => {
-        console.log("onupdate", gameId, leader, players, public, _private);
+    events.onupdate = (gameId, leader, players, pub, _priv) => {
+        console.log("onupdate", gameId, leader, players, pub, _priv);
     };
 
     // events.on("connect", () => {

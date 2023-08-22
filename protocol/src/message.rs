@@ -27,6 +27,11 @@ pub struct ClientMessage {
 /// Message from client to server
 #[derive(Debug, Deserialize, Serialize)]
 pub enum ClientMessageData {
+    /// List available game modes
+    GameModes,
+    /// List all joined games
+    JoinedGames,
+    /// Create a new game lobby by game mode name
     CreateGame(String),
     JoinGame(GameId),
     LeaveGame(GameId),
@@ -87,6 +92,10 @@ pub enum ReplyMessage {
     GameCreated(GameId),
     JoinedToGame(GameId),
     Error(ErrorReply),
+    GameModes(Vec<String>),
+    JoinedGames(Vec<GameId>),
+    /// Reply to a game-specific message
+    Inner(serde_json::Value),
 }
 
 impl ReplyMessage {
@@ -103,4 +112,6 @@ pub enum ErrorReply {
     NoSuchGameLobby,
     NotInThatGame,
     InvalidReconnectionSecret,
+    /// Game-specific error message
+    Inner(serde_json::Value),
 }

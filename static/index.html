@@ -5,22 +5,61 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat example</title>
+    <script src="//unpkg.com/alpinejs" defer></script>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/main.js"></script>
+    <script src="/static/page.js"></script>
     <script src="/static/qrcode.js"></script>
 
     <script type="module">
         import init, {WgfwEvents} from './wasm/wgfw_wasm.js';
+        window.WgfwEvents = WgfwEvents;
         (async function run() {
             await init();
-            document.onload = main(WgfwEvents);
+            document.body.dispatchEvent(new CustomEvent("start"));
         })();
     </script>
+
+    <script>
+        document.addEventListener("alpine:init", () => {
+            Alpine.data("page", () => Page);
+        });
+    </script>
 </head>
-<body >
-    <div id="global-banner">
+<body x-data="page" @start="start()">
+    <div id="global-banner" x-show="!connected">
         <h1>Loading...</h1>
         <p>Please note that this website requires JavaScript support</p>
     </div>
+
+    <!-- Tab bar -->
+    <div id="chat-tabs">
+        <template x-for="chat in Object.keys(chats).sort()">
+            <span
+                x-text="chats[chat].title || 'Untitled chat'"
+                :class="chat == activeChat && 'active'"
+                @click="activeChat = chat"
+            ></span>
+        </template>
+        <span>
+            <input type="text" x-model="newChatTitle" @keyup.enter="await newChat()" placeholder="new chat">
+            <span @click="await newChat()">+</span>
+        </span>
+    </div>
+
+    <template x-if="activeChat && activeChat in chats">
+        <div id="tab-contents">
+            <ol>
+                <template x-for="msg in chats[activeChat].messages">
+                    <li>
+                        <span x-text="msg.sender"></span>
+                        <span x-text="msg.text"></span>
+                    </li>
+                </template>
+            </ol>
+
+            <input type="text" @keyup.enter="await sendMessage($event.target)"/>
+        </div>
+    </template>
 </body>
 </html>
