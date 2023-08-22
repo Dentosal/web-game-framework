@@ -21,7 +21,11 @@ pub trait Game: Send + Sync {
     fn on_disconnect(&mut self, player: PlayerId);
     fn on_reconnect(&mut self, player: PlayerId);
     fn on_kicked(&mut self, player: PlayerId);
-    fn on_message_from(&mut self, player: PlayerId, message: serde_json::Value);
+    fn on_message_from(
+        &mut self,
+        player: PlayerId,
+        message: serde_json::Value,
+    ) -> Result<serde_json::Value, serde_json::Value>;
 }
 
 pub struct Lobby {

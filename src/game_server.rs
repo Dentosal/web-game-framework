@@ -99,8 +99,9 @@ impl GameServer {
             .finalize();
 
             let response = serde_json::to_string(&message).unwrap();
-            let player = self.players.get_mut(player_id).unwrap();
-            let _ = player.tx.send(Message::text(response)).await;
+            if let Some(player) = self.players.get_mut(player_id) {
+                let _ = player.tx.send(Message::text(response)).await;
+            }
         }
     }
 
@@ -195,6 +196,23 @@ impl GameServer {
                                     ReplyMessage::Error(ErrorReply::InvalidReconnectionSecret)
                                 }
                             }
+                            ClientMessageData::GameModes => ReplyMessage::GameModes(
+                                self.registry.games.keys().cloned().collect(),
+                            ),
+                            ClientMessageData::JoinedGames => {
+                                let games: Vec<_> = self
+                                    .games
+                                    .iter()
+                                    .filter_map(|(game_id, game)| {
+                                        if game.players.contains(&player_id) {
+                                            Some(*game_id)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect();
+                                ReplyMessage::JoinedGames(games)
+                            }
                             ClientMessageData::CreateGame(game_type) => {
                                 let game_id = GameId::new();
                                 if let Some(constructor) = self.registry.games.get(&game_type) {
@@ -230,9 +248,13 @@ impl GameServer {
                             ClientMessageData::Inner(game_id, inner_data) => {
                                 if let Some(game) = self.games.get_mut(&game_id) {
                                     if game.players.contains(&player_id) {
-                                        game.state.on_message_from(player_id, inner_data);
-                                        self.broadcast_game_state(game_id).await;
-                                        ReplyMessage::Ok
+                                        let reply =
+                                            game.state.on_message_from(player_id, inner_data);
+                                        self.broadcast_game_state(game_id).await; // TODO: only when needed
+                                        match reply {
+                                            Ok(value) => ReplyMessage::Inner(value),
+                                            Err(err) => ReplyMessage::Error(ErrorReply::Inner(err)),
+                                        }
                                     } else {
                                         ReplyMessage::Error(ErrorReply::NotInThatGame)
                                     }

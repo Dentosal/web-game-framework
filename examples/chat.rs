@@ -13,7 +13,8 @@ struct Chat {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ChatMessage {
-    pub sender: PlayerId,
+    /// If None, message is from the server
+    pub sender: Option<PlayerId>,
     pub text: String,
 }
 
@@ -27,19 +28,40 @@ impl Game for Chat {
     }
 
     fn on_disconnect(&mut self, player: PlayerId) {
-        todo!()
+        self.messages.push(ChatMessage {
+            sender: None,
+            text: format!("disconnected: {:?}", player),
+        });
     }
 
     fn on_reconnect(&mut self, player: PlayerId) {
-        todo!()
+        self.messages.push(ChatMessage {
+            sender: None,
+            text: format!("reconnected: {:?}", player),
+        });
     }
 
     fn on_kicked(&mut self, player: PlayerId) {
-        todo!()
+        self.messages.push(ChatMessage {
+            sender: None,
+            text: format!("kicked: {:?}", player),
+        });
     }
 
-    fn on_message_from(&mut self, player: PlayerId, message: serde_json::Value) {
-        todo!()
+    fn on_message_from(
+        &mut self,
+        player: PlayerId,
+        message: serde_json::Value,
+    ) -> Result<serde_json::Value, serde_json::Value> {
+        if let Some(text) = message.as_str() {
+            self.messages.push(ChatMessage {
+                sender: Some(player),
+                text: text.to_string(),
+            });
+            Ok(().into())
+        } else {
+            Err("Invalid message!!".into())
+        }
     }
 }
 
