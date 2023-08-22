@@ -1,17 +1,24 @@
 #![deny(unused_must_use)]
-#![feature(hash_drain_filter)]
+#![feature(return_position_impl_trait_in_trait)]
 
 use std::net::SocketAddr;
 
+use game_registry::GameRegistry;
 use warp::Filter;
 
+mod game_registry;
 mod game_server;
+mod game_state;
+mod message;
+mod player;
 
 use self::game_server::{ClientHandle, ServerRemote};
 
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
+
+    let mut registry = GameRegistry::default();
 
     let index = warp::get()
         .and(warp::path::end())
@@ -23,7 +30,7 @@ async fn main() {
 
     let static_files = warp::path("static").and(warp::fs::dir("./static/"));
 
-    let (jh, game_server_handle) = game_server::spawn();
+    let (jh, game_server_handle) = game_server::spawn(registry);
 
     let ws = warp::path("ws")
         .and(warp::ws())
