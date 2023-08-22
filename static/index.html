@@ -69,6 +69,16 @@
                 <div id="sidebar">
                     <h3>Settings</h3>
                     <div class="inputrow">
+                        <label for="invite-link">Invite link (click to copy):</label>
+                        <input
+                            id="invite-link"
+                            type="text"
+                            :value="window.location.origin + '/#join:' + activeChat"
+                            @click="copyToClipboard($event.target);"
+                            readonly
+                         />
+                    </div>
+                    <div class="inputrow">
                         <label for="nick-change">My nickname:</label>
                         <input id="nick-change" type="text" x-model="myNick" @keyup="await updateNick()" />
                     </div>
@@ -83,8 +93,8 @@
                         <template x-for="player in metas[activeChat].players.sort()">
                             <li :key="player">
                                 <span x-text="chats[activeChat].nicknames[player] || 'Anonymous'"></span>
-                                <span x-text="metas[activeChat].leader === me && '(owner)'"></span>
-                                <span x-text="player == me && '(you)'"></span>
+                                <span x-text="metas[activeChat].leader === me ? '(owner)' : ''"></span>
+                                <span x-text="player == me ? '(you)' : ''"></span>
                             </li>
                         </template>
                     </ul>

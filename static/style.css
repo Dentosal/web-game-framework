@@ -3,6 +3,12 @@ body {
     padding: 0;
 }
 
+#global-banner {
+    background-color: #ccf;
+    padding: 0.5rem;
+    text-align: center;
+}
+
 #chat {
     max-width: 960px;
     margin: 0 auto;
@@ -66,4 +72,19 @@ body {
 ul, ol {
     padding: 0;
     list-style-type: none;
+}
+
+.copied-indicator {
+    text-align: center;
+    padding: 0.5rem;
+    background: rgba(200, 200, 220, 0.5);
+    border-radius: 0.5rem;
+    transform: translate(-50%, -50%);
+    user-select: none;
+}
+
+.copied-indicator::after {
+    content: "\a▼";
+    white-space: pre;
+    color: rgba(100, 100, 200);
 }
