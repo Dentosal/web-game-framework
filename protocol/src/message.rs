@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    game_state::GameId,
-    player::{PlayerId, ReconnectionSecret},
-};
+use crate::{game::GameId, player::PlayerId, Identity};
 
 /// Message id, used to match replies to requests
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
@@ -13,6 +10,11 @@ pub struct MessageId(Uuid);
 impl MessageId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
+    }
+}
+impl Default for MessageId {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -31,8 +33,11 @@ pub enum ClientMessageData {
     KickPlayer(GameId, PlayerId),
     PromoteLeader(GameId, PlayerId),
 
+    /// When connecting for the first time, identify as a new player
+    NewIdentity,
+
     /// When reconnecting, identify as a player
-    Identify(PlayerId, ReconnectionSecret),
+    Identify(Identity),
 
     /// Game-specific message
     Inner(GameId, serde_json::Value),
@@ -56,11 +61,6 @@ pub enum ServerMessage {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum ServerSentMessage {
-    Initialized {
-        server_version: String,
-        player_id: PlayerId,
-        reconnection_secret: ReconnectionSecret,
-    },
     Error {
         message: String,
     },
@@ -80,7 +80,10 @@ impl ServerSentMessage {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum ReplyMessage {
+    /// Operation was successful, no data to return
     Ok,
+    /// New identity was created or reconnection was successful
+    Identity(Identity),
     GameCreated(GameId),
     JoinedToGame(GameId),
     Error(ErrorReply),
@@ -94,7 +97,10 @@ impl ReplyMessage {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum ErrorReply {
+    AlreadyIdentified,
+    MustIdentifyFirst,
     InvalidGameFormat,
     NoSuchGameLobby,
     NotInThatGame,
+    InvalidReconnectionSecret,
 }

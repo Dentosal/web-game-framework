@@ -1,19 +1,6 @@
 use std::collections::HashSet;
 
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-
-use crate::player::PlayerId;
-
-/// Game lobby (including running games)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct GameId(Uuid);
-impl GameId {
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-}
+use wgfw_protocol::PlayerId;
 
 pub trait Game: Send + Sync {
     /// Extract public game state that is visible to all players

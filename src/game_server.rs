@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::iter;
 use std::net::SocketAddr;
+use std::{iter, mem};
 
 use futures::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
@@ -9,12 +9,13 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
 
-use crate::game_registry::GameRegistry;
-use crate::game_state::{GameId, Lobby};
-use crate::message::{
-    ClientMessage, ClientMessageData, ErrorReply, ReplyMessage, ServerSentMessage,
+use wgfw_protocol::{
+    ClientMessage, ClientMessageData, ErrorReply, GameId, Identity, PlayerId, ReconnectionSecret,
+    ReplyMessage, ServerSentMessage,
 };
-use crate::player::{PlayerId, ReconnectionSecret};
+
+use crate::game_registry::GameRegistry;
+use crate::game_state::Lobby;
 
 /// Browser session
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -27,6 +28,7 @@ impl ConnectionId {
 
 struct Player {
     tx: SplitSink<WebSocket, Message>,
+    identified: bool,
 }
 
 #[derive(Debug)]
@@ -66,9 +68,13 @@ pub fn spawn(registry: GameRegistry) -> (JoinHandle<()>, ServerRemote) {
 }
 
 struct GameServer {
+    /// Currently connected ws clients -> PlayerId mapping
     clients: HashMap<ConnectionId, PlayerId>,
+    /// PlayerId -> ws client mapping. This doesn't exist for disconnected players.
     players: HashMap<PlayerId, Player>,
+    /// GameId -> Game Lobby mapping
     games: HashMap<GameId, Lobby>,
+    /// Game type registry
     registry: GameRegistry,
 }
 impl GameServer {
@@ -105,23 +111,18 @@ impl GameServer {
             log::debug!("Event: {:?}", event);
 
             match event.data {
-                EventData::Connected(mut tx) => {
+                EventData::Connected(tx) => {
                     let player_id = PlayerId::new();
-
-                    let response = serde_json::to_string(
-                        &(ServerSentMessage::Initialized {
-                            server_version: env!("CARGO_PKG_VERSION").to_owned(),
-                            player_id,
-                            reconnection_secret: ReconnectionSecret::for_player(&secret, player_id),
-                        })
-                        .finalize(),
-                    )
-                    .unwrap();
-                    tx.send(Message::text(response)).await.unwrap();
 
                     let old = self.clients.insert(event.client, player_id);
                     debug_assert!(old.is_none(), "The client id should never conflict");
-                    let old = self.players.insert(player_id, Player { tx });
+                    let old = self.players.insert(
+                        player_id,
+                        Player {
+                            tx,
+                            identified: false,
+                        },
+                    );
                     debug_assert!(old.is_none(), "The client id should never conflict");
                 }
                 EventData::Disconnected => {
@@ -129,9 +130,9 @@ impl GameServer {
                     let _ = self.players.remove(&player_id).unwrap();
                     let affected_games: HashSet<GameId> = self
                         .games
-                        .iter_mut()
+                        .iter()
                         .filter_map(|(game_id, game)| {
-                            if game.try_remove_player(&player_id) {
+                            if game.players.contains(&player_id) {
                                 Some(*game_id)
                             } else {
                                 None
@@ -157,56 +158,91 @@ impl GameServer {
                     player.tx.send(Message::text(response)).await.unwrap();
                 }
                 EventData::Message(ClientMessage { id: msgid, data }) => {
-                    let player_id = *self.clients.get(&event.client).unwrap();
+                    let mut player_id = *self.clients.get(&event.client).unwrap();
 
-                    let response: ReplyMessage = match data {
-                        ClientMessageData::Identify(_, _) => todo!("Identify"),
-                        ClientMessageData::CreateGame(game_type) => {
-                            let game_id = GameId::new();
-                            if let Some(constructor) = self.registry.games.get(&game_type) {
-                                let state = constructor();
-                                self.games.insert(
-                                    game_id,
-                                    Lobby {
-                                        leader: player_id,
-                                        players: iter::once(player_id).collect(),
-                                        state,
-                                    },
-                                );
-                                self.broadcast_game_state(game_id).await;
-                                ReplyMessage::GameCreated(game_id)
-                            } else {
-                                ReplyMessage::Error(ErrorReply::InvalidGameFormat)
-                            }
-                        }
-                        ClientMessageData::JoinGame(game_id) => {
-                            let player_id = *self.clients.get(&event.client).unwrap();
+                    let is_identified = self.players.get(&player_id).unwrap().identified;
+                    let attempts_to_identify = matches!(
+                        data,
+                        ClientMessageData::NewIdentity | ClientMessageData::Identify(..)
+                    );
 
-                            if let Some(game) = self.games.get_mut(&game_id) {
-                                game.players.insert(player_id);
-                                self.broadcast_game_state(game_id).await;
-                                ReplyMessage::JoinedToGame(game_id)
-                            } else {
-                                ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
+                    let response: ReplyMessage = if is_identified && attempts_to_identify {
+                        ReplyMessage::Error(ErrorReply::AlreadyIdentified)
+                    } else if !is_identified && !attempts_to_identify {
+                        ReplyMessage::Error(ErrorReply::MustIdentifyFirst)
+                    } else {
+                        match data {
+                            ClientMessageData::NewIdentity => {
+                                self.players.get_mut(&player_id).unwrap().identified = true;
+                                ReplyMessage::Identity(Identity {
+                                    player_id,
+                                    reconnection_secret: ReconnectionSecret::for_player(
+                                        &secret, player_id,
+                                    ),
+                                })
                             }
-                        }
-                        ClientMessageData::LeaveGame(_) => todo!("LeaveGame"),
-                        ClientMessageData::KickPlayer(_, _) => todo!("KickPlayer"),
-                        ClientMessageData::PromoteLeader(_, _) => todo!("PromoteLeader"),
-                        ClientMessageData::Inner(game_id, inner_data) => {
-                            if let Some(game) = self.games.get_mut(&game_id) {
-                                if game.players.contains(&player_id) {
-                                    game.state.on_message_from(player_id, inner_data);
-                                    self.broadcast_game_state(game_id).await;
-                                    ReplyMessage::Ok
+                            ClientMessageData::Identify(identity) => {
+                                if identity.verify(&secret) {
+                                    let old_player_id =
+                                        mem::replace(&mut player_id, identity.player_id);
+                                    self.clients.insert(event.client, identity.player_id);
+                                    let mut old_entry =
+                                        self.players.remove(&old_player_id).unwrap();
+                                    old_entry.identified = true;
+                                    self.players.insert(identity.player_id, old_entry);
+                                    ReplyMessage::Identity(identity)
                                 } else {
-                                    ReplyMessage::Error(ErrorReply::NotInThatGame)
+                                    ReplyMessage::Error(ErrorReply::InvalidReconnectionSecret)
                                 }
-                            } else {
-                                ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
+                            }
+                            ClientMessageData::CreateGame(game_type) => {
+                                let game_id = GameId::new();
+                                if let Some(constructor) = self.registry.games.get(&game_type) {
+                                    let state = constructor();
+                                    self.games.insert(
+                                        game_id,
+                                        Lobby {
+                                            leader: player_id,
+                                            players: iter::once(player_id).collect(),
+                                            state,
+                                        },
+                                    );
+                                    self.broadcast_game_state(game_id).await;
+                                    ReplyMessage::GameCreated(game_id)
+                                } else {
+                                    ReplyMessage::Error(ErrorReply::InvalidGameFormat)
+                                }
+                            }
+                            ClientMessageData::JoinGame(game_id) => {
+                                let player_id = *self.clients.get(&event.client).unwrap();
+
+                                if let Some(game) = self.games.get_mut(&game_id) {
+                                    game.players.insert(player_id);
+                                    self.broadcast_game_state(game_id).await;
+                                    ReplyMessage::JoinedToGame(game_id)
+                                } else {
+                                    ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
+                                }
+                            }
+                            ClientMessageData::LeaveGame(_) => todo!("LeaveGame"),
+                            ClientMessageData::KickPlayer(_, _) => todo!("KickPlayer"),
+                            ClientMessageData::PromoteLeader(_, _) => todo!("PromoteLeader"),
+                            ClientMessageData::Inner(game_id, inner_data) => {
+                                if let Some(game) = self.games.get_mut(&game_id) {
+                                    if game.players.contains(&player_id) {
+                                        game.state.on_message_from(player_id, inner_data);
+                                        self.broadcast_game_state(game_id).await;
+                                        ReplyMessage::Ok
+                                    } else {
+                                        ReplyMessage::Error(ErrorReply::NotInThatGame)
+                                    }
+                                } else {
+                                    ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
+                                }
                             }
                         }
                     };
+
                     let reply = response.finalize(msgid);
                     self.players
                         .get_mut(&player_id)

@@ -4,174 +4,23 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSkull</title>
+    <title>Chat example</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/main.js"></script>
     <script src="/static/qrcode.js"></script>
+
+    <script type="module">
+        import init, {WgfwEvents} from './wasm/wgfw_wasm.js';
+        (async function run() {
+            await init();
+            document.onload = main(WgfwEvents);
+        })();
+    </script>
 </head>
-<body onload="main()">
+<body>
     <div id="global-banner" class="boxed-area">
         <h1>Loading...</h1>
         <p>Please note that this website requires JavaScript support</p>
-    </div>
-
-    <form id="start-screen" class="boxed-area nodisplay" onsubmit="return submit_player_name()">
-        <h1>WebSkull</h1>
-        <p>Hi, and welcome to WebSkull! First, please pick a name so others can recognize you.</p>
-        <label>Nickname: <input type="text" placeholder="Anonymous"/></label>
-        <br>
-        <input type="submit" value="Set name">
-    </form>
-
-    <dialog id="game-share">
-        <div>
-            <div>
-                <label for="game-link">Game link</label>
-                <input id="game-link" type="readonly" onClick="this.select();"  value=""/>
-                <input type="button" value="Copy"/>
-            </div>
-            <div id="link-qrcode"></div>
-            <form method="dialog">
-                <button>Close</button>
-            </form>
-        </div>
-    </dialog>
-
-    <dialog id="game-rules">
-        <form method="dialog">
-            <button>Close</button>
-        </form>
-        <h1>Game Rules</h1>
-        <p>
-            Each player starts with four cards: three flowers and a skull.
-            Each round of the game consists of five phases:
-            <ol>
-                <li>First card</li>
-                <li>Playing cards</li>
-                <li>Challenge</li>
-                <li>Revelation</li>
-                <li>Reward or Punishment</li>
-            </ol>
-        </p>
-        <h2>First card</h2>
-        <p>
-            Each player plays one of their cards face down on the table.
-            Each player has a separate stack, into which they play their cards.
-            On the first round the starting player is selected randomly.
-        </p>
-        <h2>Playing cards</h2>
-        <p>
-            On this phase the player can, on their turn, either:
-            <ul>
-                <li>Play one of their remaining cards and pass the turn to the next player</li>
-                <li>Start the challenge</li>
-            </ul>
-            If the player has no cards left, then they must start the challenge.
-        </p>
-        <h2>Challenge</h2>
-        <p>
-            When a player starts the challenge, they must name a number, <i>the bet</i>,
-            which must be at least one, and at most the total number of cards on the table.
-            If the player bets the maximum number, the player is selected as the challenger.
-            Otherwise, turn passes to the next player who can either raise the bid by at least one,
-            or pass. By passing, the player drops out of this round, and will not participate again
-            until the next round. When all other players have passed, or the maximum bet has been
-            reached, the player will largest bet is selected as the challenger. The challenger must then
-            attempt the revelation.
-        </p>
-        <h2>Revelation</h2>
-        <p>
-            The challenger must reveal the number of cards equal to their bet from the table.
-            They must reveal from their own stack first, and when it's empty they can pick from
-            any other stack. Cards must be revealed in order, last played card first, one at a time.
-            If any of the revealed cards is a skull, the player has failed, and must face the Punishment.
-            If all cards get revealed, meaning that every one of them is a flower, then challenger wins the Reward.
-        </p>
-        <h2>Punishment</h2>
-        <p>
-            The player loses one of their cards randomly. Other players will not see whether it's a skull or a flower.
-            If the player has no cards left, they are removed from the game.
-            The player whose skull caused the Punishment starts the next round, even if it was from their own stack.
-            If the player is removed from the game by their own skull, the next player clockwise continues instead.
-        </p>
-        <h2>Reward</h2>
-        <p>
-            The player gets a single point. First to two points wins.
-            Player winning a point starts the next round.
-        </p>
-        <h1>Example game</h1>
-        <p>
-            There players: You, Alice and Bob.
-        </p>
-        <h2>Round 1</h2>
-        <p>
-            You have 💀🌹🌹🌹. You play 💀 for the first card. Others play their first cards.
-            Alice is selected as the starting player, and plays one more card. Bob starts the challenge with a bet of 2.
-            You pass, although you could bluff with a bet of three, but it's unlikely that Alice would bet four. Alice passes as well.
-            Bob reveals their card: 🌹. Then they reveal a card from Alice, also 🌹. The challenge is passed, and Bob is granted a point.
-        </p>
-        <h2>Round 2</h2>
-        <p>
-            You have 💀🌹🌹🌹. You play 💀 for the first card. Others play their first cards.
-            Bob starts, as he won the previous round, and immediately starts a challenge with a bet of 2. Since you have played
-            a skull, the bet of three would immediately lose you a card, so you pass. Alice passes as well.
-            Bob reveals their card: 🌹. Then they reveal a card from you: 💀. They lose a random card.
-        </p>
-        <h2>Round 3</h2>
-        <p>
-            You have 💀🌹🌹🌹. You play 🌹 for the first card. Others play their first cards.
-            You start, as you just skulled Bob. You start a challenge of three, assuming that others are greedy.
-            This is the max bet, so you start the revelation. First you reveal your own 🌹, then from Alice 🌹 and lastly
-            from Bob 💀. Challenge failed. You lose one random card. Fortunately, it's 🌹.
-        </p>
-        <h2>Round 4</h2>
-        <p>
-            You have 💀🌹🌹. You play 🌹 for the first card. Others play their first cards.
-            Bob starts, as you just got skulled by him. They play a card. You play a 💀. Alice plays a card.
-            Bob plays a card. You start a challenge of three, trying to bluff. Alice raises the bet to four.
-            Bob passes. You pass, happily. Alice reveals her cards, 🌹 and 🌹, then one 🌹 from Bob. Then 💀 from you.
-            Challenge failed, and Alice loses one random card.
-        </p>
-        <h2>Round 5</h2>
-        <p>
-            You have 💀🌹🌹. You play 💀 for the first card. Others play their first cards.
-            You start, as you just skulled Alice. You start a challenge of one, whhich is an interesting gamble.
-            Alice raises the bet to full three, then reveals 🌹 from their own stack and 💀 from Bob.
-            Challenge fails, and Alice loses a random card.
-        </p>
-        <h2>Round 6</h2>
-        <p>
-            You have 💀🌹🌹. You play 🌹 for the first card. Others play their first cards.
-            Bob starts, as Alice just got skulled by him. Bob starts a challenge of three, the max bet. He reveals
-            🌹 form their deck, then 🌹 from you, and lastly 🌹 from Alice. Bob gains the second point and wins.
-        </p>
-        <form method="dialog">
-            <button>Close</button>
-        </form>
-    </dialog>
-
-    <div id="game-screen" class="boxed-area nodisplay">
-        <div>
-            Game state: <span id="game-state">Loading...</span>
-            <input type="button" value="Invite players" onclick="document.getElementById('game-share').showModal()">
-            <input type="button" value="Show game rules" onclick="document.getElementById('game-rules').showModal()">
-        </div>
-        <div id="players"></div>
-        <div id="actions">
-            <div data-if-state="lobby">
-                <div data-if-role="leader">
-                    <input type="button" id="start-game-button" value="Start game" onclick="start_game()">
-                </div>
-            </div>
-            <div data-if-state="in-game">
-                <input type="button" value="Play skull">
-                <input type="button" value="Play flower">
-                <input type="button" value="Challenge">
-            </div>
-            <div data-if-role="anyone">
-                <input type="button" value="Leave game">
-            </div>
-        </div>
     </div>
 </body>
 </html>
