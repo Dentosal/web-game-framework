@@ -116,13 +116,13 @@ async fn main() {
 
     let index = warp::get()
         .and(warp::path::end())
-        .and(warp::fs::file("./static/index.html"));
+        .and(warp::fs::file("./examples/chat_static/index.html"));
 
     let favicon = warp::get()
         .and(warp::path("favicon.ico"))
-        .and(warp::fs::file("./static/images/favicon.ico"));
+        .and(warp::fs::file("./examples/chat_static/images/favicon.ico"));
 
-    let static_files = warp::path("static").and(warp::fs::dir("./static/"));
+    let static_files = warp::path("static").and(warp::fs::dir("./examples/chat_static/"));
 
     let (game_server, ws) = Builder::new().register::<Chat>("chat").spawn();
 
