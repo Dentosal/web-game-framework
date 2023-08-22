@@ -20,7 +20,9 @@ pub trait Game: Send + Sync {
 
     fn on_disconnect(&mut self, player: PlayerId);
     fn on_reconnect(&mut self, player: PlayerId);
-    fn on_kicked(&mut self, player: PlayerId);
+    fn on_join(&mut self, player: PlayerId);
+    fn on_left(&mut self, player: PlayerId);
+    fn on_kick(&mut self, player: PlayerId);
     fn on_message_from(
         &mut self,
         player: PlayerId,

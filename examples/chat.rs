@@ -16,9 +16,9 @@ struct Chat {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ChatMessage {
-    /// If None, message is from the server
-    pub sender: Option<PlayerId>,
+    pub sender: PlayerId,
     pub text: String,
+    pub formatting: Option<String>,
 }
 
 /// Message sent by the client
@@ -44,22 +44,41 @@ impl Game for Chat {
 
     fn on_disconnect(&mut self, player: PlayerId) {
         self.messages.push(ChatMessage {
-            sender: None,
-            text: format!("disconnected: {:?}", player),
+            sender: player,
+            text: format!("disconnected"),
+            formatting: Some("server_issued".to_owned()),
         });
     }
 
     fn on_reconnect(&mut self, player: PlayerId) {
         self.messages.push(ChatMessage {
-            sender: None,
-            text: format!("reconnected: {:?}", player),
+            sender: player,
+            text: format!("reconnected"),
+            formatting: Some("server_issued".to_owned()),
         });
     }
 
-    fn on_kicked(&mut self, player: PlayerId) {
+    fn on_join(&mut self, player: PlayerId) {
         self.messages.push(ChatMessage {
-            sender: None,
-            text: format!("kicked: {:?}", player),
+            sender: player,
+            text: format!("joined"),
+            formatting: Some("server_issued".to_owned()),
+        });
+    }
+
+    fn on_left(&mut self, player: PlayerId) {
+        self.messages.push(ChatMessage {
+            sender: player,
+            text: format!("left"),
+            formatting: Some("server_issued".to_owned()),
+        });
+    }
+
+    fn on_kick(&mut self, player: PlayerId) {
+        self.messages.push(ChatMessage {
+            sender: player,
+            text: format!("kicked out"),
+            formatting: Some("server_issued".to_owned()),
         });
     }
 
@@ -72,8 +91,9 @@ impl Game for Chat {
             match msg {
                 UserMessage::Chat(text) => {
                     self.messages.push(ChatMessage {
-                        sender: Some(player),
+                        sender: player,
                         text: text.to_string(),
+                        formatting: None,
                     });
                 }
                 UserMessage::Title(title) => {

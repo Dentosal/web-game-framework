@@ -151,6 +151,11 @@ impl GameServer {
                         .collect();
 
                     for game_id in affected_games {
+                        self.games
+                            .get_mut(&game_id)
+                            .unwrap()
+                            .state
+                            .on_disconnect(player_id);
                         self.broadcast_game_state(game_id).await;
                     }
                 }
@@ -200,6 +205,29 @@ impl GameServer {
                                         self.players.remove(&old_player_id).unwrap();
                                     old_entry.identified = true;
                                     self.players.insert(identity.player_id, old_entry);
+
+                                    // Notify running games about reconnection
+                                    let affected_games: HashSet<GameId> = self
+                                        .games
+                                        .iter()
+                                        .filter_map(|(game_id, game)| {
+                                            if game.players.contains(&player_id) {
+                                                Some(*game_id)
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .collect();
+
+                                    for game_id in affected_games {
+                                        self.games
+                                            .get_mut(&game_id)
+                                            .unwrap()
+                                            .state
+                                            .on_reconnect(player_id);
+                                        self.broadcast_game_state(game_id).await;
+                                    }
+
                                     ReplyMessage::Identity(identity)
                                 } else {
                                     ReplyMessage::Error(ErrorReply::InvalidReconnectionSecret)
@@ -240,6 +268,11 @@ impl GameServer {
                                             state,
                                         },
                                     );
+                                    self.games
+                                        .get_mut(&game_id)
+                                        .unwrap()
+                                        .state
+                                        .on_join(player_id);
                                     self.broadcast_game_state(game_id).await;
                                     ReplyMessage::GameCreated(game_id)
                                 } else {
@@ -251,6 +284,11 @@ impl GameServer {
 
                                 if let Some(game) = self.games.get_mut(&game_id) {
                                     game.players.insert(player_id);
+                                    self.games
+                                        .get_mut(&game_id)
+                                        .unwrap()
+                                        .state
+                                        .on_join(player_id);
                                     self.broadcast_game_state(game_id).await;
                                     ReplyMessage::JoinedToGame(game_id)
                                 } else {

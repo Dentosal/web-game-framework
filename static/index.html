@@ -53,7 +53,7 @@
                 <div id="messages">
                     <ol>
                         <template x-for="msg in chats[activeChat].messages">
-                            <li>
+                            <li :class="msg.formatting">
                                 <span x-text="chats[activeChat].nicknames[msg.sender] || 'Anonymous'"></span>:
                                 <span x-text="msg.text"></span>
                             </li>
