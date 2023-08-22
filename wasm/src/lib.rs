@@ -74,12 +74,7 @@ impl WgfwEvents {
             Box::new(move |reply| match reply {
                 ReplyMessage::Identity(identity) => {
                     console_log!("Got new identity: {:?}", identity);
-                    storage::set_typed("wgfw_identity", &identity);
-                    if let Some(onready) = cloned_self.onready.lock().unwrap().as_ref() {
-                        onready.call0(&JsValue::NULL).expect("onready errored");
-                    } else {
-                        console_log!("No onready callback");
-                    }
+                    cloned_self.identify_done(identity);
                 }
                 _ => {
                     console_log!("Unexpected reply: {:?}", reply);
@@ -99,12 +94,7 @@ impl WgfwEvents {
                 Box::new(move |reply| match reply {
                     ReplyMessage::Identity(identity) => {
                         console_log!("Restored old identity: {:?}", identity);
-                        storage::set_typed("wgfw_identity", &identity);
-                        if let Some(onready) = cloned_self.onready.lock().unwrap().as_ref() {
-                            onready.call0(&JsValue::NULL).expect("onready errored");
-                        } else {
-                            console_log!("No onready callback");
-                        }
+                        cloned_self.identify_done(identity);
                     }
                     ReplyMessage::Error(ErrorReply::InvalidReconnectionSecret) => {
                         // The server has restarted, or the identity has been purged.
@@ -120,6 +110,21 @@ impl WgfwEvents {
         } else {
             console_log!("No old identity found, requesting new one");
             self.make_new_identity();
+        }
+    }
+
+    /// called by identify() when it's ready
+    fn identify_done(&self, identity: Identity) {
+        storage::set_typed("wgfw_identity", &identity);
+        if let Some(onready) = self.onready.lock().unwrap().as_ref() {
+            onready
+                .call1(
+                    &JsValue::NULL,
+                    &serde_wasm_bindgen::to_value(&identity.player_id).unwrap(),
+                )
+                .expect("onready errored");
+        } else {
+            console_log!("No onready callback");
         }
     }
 

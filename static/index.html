@@ -7,7 +7,6 @@
     <title>Chat example</title>
     <script src="//unpkg.com/alpinejs" defer></script>
     <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/main.js"></script>
     <script src="/static/page.js"></script>
     <script src="/static/qrcode.js"></script>
 
@@ -32,34 +31,66 @@
         <p>Please note that this website requires JavaScript support</p>
     </div>
 
-    <!-- Tab bar -->
-    <div id="chat-tabs">
-        <template x-for="chat in Object.keys(chats).sort()">
-            <span
-                x-text="chats[chat].title || 'Untitled chat'"
-                :class="chat == activeChat && 'active'"
-                @click="activeChat = chat"
-            ></span>
-        </template>
-        <span>
-            <input type="text" x-model="newChatTitle" @keyup.enter="await newChat()" placeholder="new chat">
-            <span @click="await newChat()">+</span>
-        </span>
-    </div>
-
-    <template x-if="activeChat && activeChat in chats">
-        <div id="tab-contents">
-            <ol>
-                <template x-for="msg in chats[activeChat].messages">
-                    <li>
-                        <span x-text="msg.sender"></span>
-                        <span x-text="msg.text"></span>
-                    </li>
-                </template>
-            </ol>
-
-            <input type="text" @keyup.enter="await sendMessage($event.target)"/>
+    <div id="chat">
+        <div id="chat-tabs">
+            <template x-for="chat in Object.keys(chats).sort()">
+                <input
+                    type="button"
+                    :value="chats[chat].title || 'Untitled chat'"
+                    :class="chat === activeChat && 'active'"
+                    :key="chat"
+                    @click="activeChat = chat"
+                />
+            </template>
+            <span>
+                <input type="text" x-model="newChatTitle" @keyup.enter="await newChat()" placeholder="new chat">
+                <span @click="await newChat()">+</span>
+            </span>
         </div>
-    </template>
+
+        <template x-if="activeChat && activeChat in chats">
+            <div id="tab-contents">
+                <div id="messages">
+                    <ol>
+                        <template x-for="msg in chats[activeChat].messages">
+                            <li>
+                                <span x-text="chats[activeChat].nicknames[msg.sender] || 'Anonymous'"></span>:
+                                <span x-text="msg.text"></span>
+                            </li>
+                        </template>
+                        <template x-if="chats[activeChat].messages.length === 0">
+                            <li><i>No messages yet</i></li>
+                        </template>
+                    </ol>
+
+
+                    <input type="text" @keyup.enter="await sendMessage($event.target)" placeholder="Message..." autofocus/>
+                </div>
+                <div id="sidebar">
+                    <h3>Settings</h3>
+                    <div class="inputrow">
+                        <label for="nick-change">My nickname:</label>
+                        <input id="nick-change" type="text" x-model="myNick" @keyup="await updateNick()" />
+                    </div>
+                    <template x-if="metas[activeChat].leader === me">
+                        <div class="inputrow">
+                            <label for="title-change">Channel title:</label>
+                            <input id="title-change" type="text" x-model="chats[activeChat].title" @keyup="await updateChatTitle()" />
+                        </div>
+                    </template>
+                    <h3>Participants</h3>
+                    <ul>
+                        <template x-for="player in metas[activeChat].players.sort()">
+                            <li :key="player">
+                                <span x-text="chats[activeChat].nicknames[player] || 'Anonymous'"></span>
+                                <span x-text="metas[activeChat].leader === me && '(owner)'"></span>
+                                <span x-text="player == me && '(you)'"></span>
+                            </li>
+                        </template>
+                    </ul>
+                </div>
+            </div>
+        </template>
+    </div>
 </body>
 </html>

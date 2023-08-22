@@ -3,20 +3,63 @@ body {
     padding: 0;
 }
 
+#chat {
+    max-width: 960px;
+    margin: 0 auto;
+}
+
 #chat-tabs {
     margin: 0.5rem;
     border: 1px solid #ccc;
     display: flex;
     flex-direction: row;
     flex-wrap: nowrap;
+    align-items: center;
 }
 
 #chat-tabs > span {
-    margin: 0.1rem;
+    margin: 0.1rem 0.2rem;
     padding: 0.5rem;
     border: 1px solid black;
 }
 
-#chat-tabs > span.active {
+#chat-tabs > input[type=button] {
+    margin: 0.1rem 0.2rem;
+    padding: 0.5rem;
+    border: 1px solid black;
+}
+
+#chat-tabs > input[type=button].active {
     background-color: #ccf;
+}
+
+#tab-contents {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+#messages {
+    margin: 1rem;
+}
+
+#sidebar {
+    margin: 1rem;
+}
+
+.inputrow {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+.inputrow > input {
+    margin-top: 0.2rem;
+    margin-left: 1rem;
+}
+
+ul, ol {
+    padding: 0;
+    list-style-type: none;
 }

@@ -1,5 +1,7 @@
 #![deny(unused_must_use)]
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use warp::Filter;
 
@@ -9,6 +11,7 @@ use wgfw::{game_state::Game, Builder, PlayerId};
 struct Chat {
     pub title: String,
     pub messages: Vec<ChatMessage>,
+    pub nicknames: HashMap<PlayerId, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,6 +29,8 @@ enum UserMessage {
     Chat(String),
     /// Change the title of the chat
     Title(String),
+    /// Change nickname in this chat
+    Nick(String),
 }
 
 impl Game for Chat {
@@ -73,6 +78,9 @@ impl Game for Chat {
                 }
                 UserMessage::Title(title) => {
                     self.title = title;
+                }
+                UserMessage::Nick(name) => {
+                    self.nicknames.insert(player, name);
                 }
             }
             Ok(().into())

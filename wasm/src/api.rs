@@ -65,6 +65,7 @@ macro_rules! server_msg {
 
 // Messages to server
 server_msg!(GameModes, GameModes, game_modes);
+server_msg!(JoinedGames, JoinedGames, joined_games);
 server_msg!(CreateGame, GameCreated, create_game, game_type: String);
 server_msg!(JoinGame, JoinedToGame, join_game, game_id: GameId);
 server_msg!(Inner, Inner, inner, game_id: GameId, inner: JsValue);

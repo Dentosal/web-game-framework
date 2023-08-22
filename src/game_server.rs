@@ -78,30 +78,39 @@ struct GameServer {
     registry: GameRegistry,
 }
 impl GameServer {
-    async fn broadcast_game_state(&mut self, game_id: GameId) {
+    async fn send_state_to_player(&mut self, game_id: GameId, player_id: PlayerId) {
         let game = self.games.get(&game_id).unwrap();
+        if !game.players.contains(&player_id) {
+            return;
+        }
 
         let public_state = game.state.public_state();
+        let private_state = game.state.state_for_player(player_id);
 
-        for player_id in game.players.iter() {
-            let private_state = game.state.state_for_player(*player_id);
+        let mut players: Vec<_> = game.players.iter().copied().collect();
+        players.sort();
 
-            let mut players: Vec<_> = game.players.iter().copied().collect();
-            players.sort();
+        let message = ServerSentMessage::GameInfo {
+            id: game_id,
+            leader: game.leader,
+            players,
+            public_state,
+            private_state,
+        }
+        .finalize();
 
-            let message = ServerSentMessage::GameInfo {
-                id: game_id,
-                leader: game.leader,
-                players,
-                public_state: public_state.clone(),
-                private_state,
-            }
-            .finalize();
+        let response = serde_json::to_string(&message).unwrap();
+        if let Some(player) = self.players.get_mut(&player_id) {
+            let _ = player.tx.send(Message::text(response)).await;
+        }
+    }
 
-            let response = serde_json::to_string(&message).unwrap();
-            if let Some(player) = self.players.get_mut(player_id) {
-                let _ = player.tx.send(Message::text(response)).await;
-            }
+    async fn broadcast_game_state(&mut self, game_id: GameId) {
+        let game = self.games.get(&game_id).unwrap();
+        let players: Vec<PlayerId> = game.players.iter().copied().collect();
+
+        for player_id in players {
+            self.send_state_to_player(game_id, player_id).await;
         }
     }
 
@@ -211,6 +220,12 @@ impl GameServer {
                                         }
                                     })
                                     .collect();
+
+                                // Send game state to player
+                                for game_id in games.iter() {
+                                    self.broadcast_game_state(*game_id).await;
+                                }
+
                                 ReplyMessage::JoinedGames(games)
                             }
                             ClientMessageData::CreateGame(game_type) => {

@@ -29,7 +29,7 @@ pub struct ClientMessage {
 pub enum ClientMessageData {
     /// List available game modes
     GameModes,
-    /// List all joined games
+    /// List all joined games. Receive game states as a side effect.
     JoinedGames,
     /// Create a new game lobby by game mode name
     CreateGame(String),
