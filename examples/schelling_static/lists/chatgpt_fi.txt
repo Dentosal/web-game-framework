@@ -1,0 +1,188 @@
+Pääväri
+Lemmikki
+Kuuluisa näyttelijä
+Vuodenaika
+Pizzatäyte
+Planeetta aurinkokunnassamme
+Klassinen satu
+Viikonpäivä
+Kulkuväline
+Valtio Euroopassa
+Hedelmä
+Sosiaalisen median alusta
+Sarjakuvahahmo
+Lautapeli
+Kukan tyyppi
+Romaani
+Soitin
+Mauste
+Valtameri
+Jalkine
+Väri ruusuille
+Pikaruokaketju
+Kuuluisa maamerkki Pariisissa
+Hittikappale
+Ruumiinosa
+Aamiaismurojen tyyppi
+Elokuvan nimi
+Jäätelömaku
+Voileipä-aines
+Taiteilija
+Mausteisesta ruoasta tunnettu maa
+Puu
+TV-sarja
+Vuoristo
+Maatila-eläin
+Joki
+Työkalulaatikosta löytyvä työkalu
+Sääilmiö
+Suosittu supersankari
+Tanssityyli
+Hampurilaistäyte
+Yhteinen ulkoilu
+Aamiaisjuoma
+Kuuluisa historiallinen henkilö
+Koirarotu
+Pastan tyyppi
+Tähtikuvio
+Pallopeli
+Salaatissaaine
+Tiedemies
+Fyysikko
+Matemaatikko
+Kemisti
+Lomakohde
+Voileipäleivän tyyppi
+Musiikkigenre
+Pizzatäyte
+Maalaus
+Keittiöväline
+Liikennevalon väri
+Kouluaine
+Cocktail
+Veistos
+Kenkätyyppi
+Pilven tyyppi
+Toimistotarvike
+Arkkitehtuurin tyyli
+Jalokivi
+Verkkosivusto
+Säveltäjä
+Hatun tyyppi
+Kylmä juoma
+Sota
+Valas
+Tanssiliike
+Matelija
+Tutkimusmatkailija
+Nisäkkäs
+Pizzan muoto
+Filosofi
+Hyönteinen
+Nobel-palkinto
+Renessanssitaiteilija
+Kvarkki
+Ooppera
+Muinainen sivilisaatio
+Geologinen aikakausi
+Kryptovaluutta
+Alkuaine
+Antiikin filosofi
+Matematiikan ala
+Pääkaupunki Aasiassa
+Kirjoitusjärjestelmä
+Uhanalainen eläinlaji
+Nobel-palkittu kirjailija
+Eksoottinen hedelmä
+Surrealistinen maalaus
+Myyttinen olento
+Klassinen kreikkalainen näytelmä
+Arkkitehtoninen tyyli
+Talviurheilulaji
+Suomalainen säveltäjä
+Suomalainen ruokalaji
+Suomalainen arkkitehti
+Järvi Suomessa
+Suomen kansallispuisto
+Suomalainen saunaperinne
+Suomalainen yritys
+Suomen historiallinen henkilö
+Suomalainen designbrändi
+Kuuluisa suomalainen kirjailija
+Suomalainen mytologinen olento
+Suomen rannikkokaupunki
+Suomen luonnon ihme
+suomalaista kulttuuria
+Suomalainen innovaatio
+Suomen sananlaskuja tai sanontoja
+Nollasummapeli
+Fibonaccin luku
+Irrationaaliluku
+Alkuluku
+Geometrinen muoto
+Kahvi tai tee?
+Kesä vai talvi?
+Kissat vai koirat?
+Pizza vai pasta?
+Ranta vai vuoret?
+Kirjoja vai elokuvia?
+Aamu vai ilta?
+Suklaata vai vaniljaa?
+Kaupunki vai maaseutu?
+Aurinko vai sade?
+Komedia vai draama?
+Apple vai Android?
+Lentokone vai juna?
+Rock vai pop musiikki?
+Makea vai suolainen?
+Fiktio vai tietokirjallisuus?
+Facebook vai Twitter?
+Auringonnousu vai auringonlasku?
+Auto vai pyörä?
+Kahvila vai leipomo?
+Aamiainen vai illallinen?
+Star Wars vai Star Trek?
+Kitara vai piano?
+Tekstiviesti vai puhelinsoitto?
+Sademetsä vai autiomaa?
+Komedia vai kauhu?
+Kahvi vai energiajuoma?
+Klassista tai modernia taidetta?
+Vaellus vai uinti?
+Juna vai bussi?
+Auringonnousu vai auringonlasku?
+Meri vai järvi?
+Fiktio vai runous?
+Scifi vai fantasia?
+Aamulla, iltapäivällä vai illalla?
+Punainen, sininen vai vihreä?
+Bussi, juna vai auto?
+Fiktio, tietokirjallisuus vai runous?
+Ranta, vuoret vai kaupunki?
+Rock, pop vai hip-hop?
+Kuuma, kylmä vai lämmin?
+Komedia, draama vai trilleri?
+Teetä, kahvia vai kuumaa suklaata?
+Pizzaa, hampurilaista vai sushia?
+Puhelinsoitto, tekstiviesti vai sähköposti?
+Kesä, syksy vai talvi?
+Pyöräily, lenkkeily vai uinti?
+Toiminta, seikkailu vai fantasia?
+Museo, puisto vai ostoskeskus?
+Kannettava tietokone, pöytäkone vai tabletti?
+Punainen, sininen, vihreä vai keltainen?
+Auto, bussi, juna vai pyörä?
+Komedia, draama, toiminta vai romanssi?
+Kahvia, teetä, kaakaota vai mehua?
+Pizza, hampurilainen, sushi vai salaatti?
+Aamu, iltapäivä, ilta vai yö?
+Rock, pop, hip-hop vai jazz?
+Kannettava tietokone, pöytäkone, tabletti vai älypuhelin?
+Ranta, vuoret, kaupunki vai maaseutu?
+Elokuvateatteri, streamaus, DVD tai vuokraus?
+Kävely, lenkkeily, pyöräily tai uinti?
+Puhelu, tekstiviesti, sähköposti vai videopuhelu?
+Museo, puisto, ostoskeskus vai teatteri?
+Komedia, draama, trilleri vai fantasia?
+Kesä, syksy, talvi vai kevätloma?
+Kuuma, kylmä, lämmin vai viileä?

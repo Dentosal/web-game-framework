@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schelling point game</title>
+    <script src="//unpkg.com/alpinejs" defer></script>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/page.js"></script>
+
+    <script type="module">
+        import init, {WgfwEvents} from './wasm/wgfw_wasm.js';
+        window.WgfwEvents = WgfwEvents;
+        (async function run() {
+            await init();
+            document.body.dispatchEvent(new CustomEvent("start"));
+        })();
+    </script>
+
+    <script>
+        document.addEventListener("alpine:init", () => {
+            Alpine.data("page", () => Page);
+        });
+    </script>
+</head>
+<body x-data="page" @start="start()">
+    <div id="global-banner" x-show="!me">
+        <h1>Loading...</h1>
+        <p>Please note that this website requires JavaScript support</p>
+    </div>
+
+    <div id="nickpicker" x-show="myNick === null">
+        <h1>Pick a nickname</h1>
+        <input type="text" placeholder="nickname" required autofocus @keyup.enter="trySetNick($event.target.value)">
+    </div>
+
+    <div id="not-in-game" x-show="gameId == null && myNick !== null">
+        <div>You can join an existing game using a game link.</div>
+        <div>Create a new game by selecting a game mode below.</div>
+        <div class="cards">
+            <template x-for="mode in gameModes">
+                <input type="button" :value="mode" @click="createGame($event.target.value)">
+            </template>
+        </div>
+    </div>
+
+    <div id="game" x-show="gameId !== null && myNick !== null">
+        <div id="ingame" x-show="false">
+            <div>
+                <h1>Current question</h1>
+                <input type="text" name="" id="">
+            </div>
+            <div>
+                <h1>Propose question</h1>
+                <input type="text" name="" id="">
+            </div>
+            <div>
+                <h1>Participants</h1>
+                <ul>
+                    <li>Player 1</li>
+                    <li>Player 2</li>
+                    <li>Player 3</li>
+                </ul>
+            </div>
+        </div>
+        <h3>Participants</h3>
+        <ul>
+            <template x-for="player in players.sort()">
+                <li :key="player">
+                    <span x-text="state.nicknames[player] || 'Anonymous'"></span>
+                    <span x-text="player === leader ? '(leader)' : ''"></span>
+                    <span x-text="player === me ? '(you)' : ''"></span>
+                </li>
+            </template>
+        </ul>
+        <div class="invitelink">
+            <label for="invite-link">Invite link (click to copy):</label>
+            <input id="invite-link" type="text" :value="window.location.origin + '/#join:' + gameId"
+                @click="copyToClipboard($event.target);" readonly />
+        </div>
+        <fieldset id="gamesettings" @input.debounce="await updateSettings()">
+            <legend>Game settings</legend>
+            After
+            <input type="number" min="0" max="100" step="1" x-model.number="state.settings.percentage"/>
+            % of the players are ready, start a timer of
+            <input type="number" min="0" max="100" step="1" x-model.number="state.settings.timer"/> seconds.
+            <ul>
+                <li>If all players are ready, the timer ends immediately.</li>
+                <li>Use 0% of players to start the timer immeditately.</li>
+                <li>Use 100% of players to wait until everyone is ready.</li>
+            </ul>
+            <div class="emphasize-labels">
+                Questions can be proposed by
+                <label><input type="radio" x-model="state.settings.propose" value="all">all players</label>
+                <label><input type="radio" x-model="state.settings.propose" value="leader">game leader</label>
+                <label><input type="radio" x-model="state.settings.propose" value="no">on one</label>
+            </div>
+            <div>
+                If there are no proposed questions, pick one from:
+                <input type="button" value="all"  @click="state.settings.question_lists.map(q => {q.enabled = true;})">
+                <input type="button" value="none" @click="state.settings.question_lists.map(q => {q.enabled = false;})">
+                <ul>
+                    <template x-for="list in state.settings.question_lists">
+                        <li>
+                            <label><input type="checkbox" x-model="list.enabled"><span x-text="list.name || list.url"></span></label>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+            <div class="emphasize-labels">
+                The order of questions is
+                <label><input type="radio" x-model="state.settings.order" value="random">randomized</label>
+                <label><input type="radio" x-model="state.settings.order" value="fifo">oldest first</label>
+                <label><input type="radio" x-model="state.settings.order" value="lifo">latest first</label>
+            </div>
+            <div>
+                <label><input type="checkbox" x-model="state.settings.anonymize">Anonymize answers</label>
+            </div>
+            <div class="emphasize-labels">
+                After the round wait for
+                <label><input type="radio" x-model="state.settings.ready" value="all">all players</label>
+                <label><input type="radio" x-model="state.settings.ready" value="leader">game leader</label>
+                <label><input type="radio" x-model="state.settings.ready" value="majority">majority</label>
+                <label><input type="radio" x-model="state.settings.ready" value="single">anyone</label>
+                <label><input type="radio" x-model="state.settings.ready" value="no">no one</label>
+                until starting the next round.
+            </div>
+            <div>
+                The delay between rounds is at least <input type="number" min="0" step="1" x-model.number="state.settings.delay"/> seconds.
+            </div>
+        </fieldset>
+    </div>
+</body>
+</html>

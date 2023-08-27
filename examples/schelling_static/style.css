@@ -1,0 +1,113 @@
+body {
+    margin: 0;
+    padding: 0;
+
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+}
+
+#global-banner {
+    background-color: #ccf;
+    padding: 0.5rem;
+    text-align: center;
+}
+
+#game {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+#messages {
+    margin: 1rem;
+}
+
+#messages .server_issued {
+    font-style: italic;
+}
+
+#sidebar {
+    margin: 1rem;
+}
+
+.inputrow {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+.inputrow > input {
+    margin-top: 0.2rem;
+    margin-left: 1rem;
+}
+
+.copied-indicator {
+    text-align: center;
+    padding: 0.5rem;
+    background: rgba(200, 200, 220, 0.5);
+    border-radius: 0.5rem;
+    transform: translate(-50%, -50%);
+    user-select: none;
+}
+
+.copied-indicator::after {
+    content: "\a▼";
+    white-space: pre;
+    color: rgba(100, 100, 200);
+}
+
+#nickpicker {
+    max-width: 960px;
+    margin: 1rem auto;
+    padding: 1rem;
+    text-align: center;
+    background: rgba(200, 200, 220, 0.5);
+    border-radius: 0.5rem;
+}
+
+#not-in-game {
+    font-size: 1.3rem;
+    text-align: center;
+}
+
+#not-in-game .cards {
+    margin: 1rem;
+
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    flex-wrap: wrap;
+
+    font-variant: small-caps;
+}
+
+#not-in-game .cards > * {
+    margin: 0.5rem;
+    padding: 2rem;
+    border: 1px solid black;
+    background: #eef;
+    font-size: 1.2em;
+    cursor: pointer;
+    box-shadow: 0 0 0.5rem black;
+}
+
+#gamesettings .emphasize-labels {
+    line-height: 150%;
+}
+
+#gamesettings .emphasize-labels label {
+    border: 1px solid #aaf;
+    border-radius: 0.5rem;
+    padding: 0.2rem;
+    white-space: nowrap;
+}
+
+#gamesettings input[type=number] {
+    width: 8ch;
+}
+
+fieldset > * {
+    margin: 0.5rem 0.1rem;
+}

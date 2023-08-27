@@ -35,13 +35,23 @@ macro_rules! server_msg_c1 {
     };
 }
 
+macro_rules! server_msg_c2 {
+    ($ra:ident) => {
+        serde_wasm_bindgen::to_value(&$ra).unwrap()
+    };
+    () => {
+        JsValue::null()
+    };
+}
+
 macro_rules! server_msg {
-    ($typename:ident, $replyname:ident, $name:ident $(, $an:ident : $at:ident)*) => {
+    ($typename:ident, $replyname:ident $(($ra:ident))?, $name:ident $(, $an:ident : $at:ident)*) => {
         #[wasm_bindgen]
         impl WgfwEvents {
             #[wasm_bindgen]
             pub async fn $name(&self, $($an: JsValue),*) -> Result<JsValue, String> {
                 let (tx, rx) = futures::channel::oneshot::channel::<ReplyMessage>();
+                crate::console_log!("Sending message {:?} {:?}", stringify!($name), ($(&$an),*));
                 self.send_message(
                     server_msg_c1!($typename $(,$an)*),
                     Box::new(move |data| {
@@ -51,9 +61,7 @@ macro_rules! server_msg {
 
                 rx.await
                     .map(|value| match value {
-                        ReplyMessage::$replyname(value) => {
-                            Ok(serde_wasm_bindgen::to_value(&value).unwrap())
-                        }
+                        ReplyMessage::$replyname $(($ra))? => Ok(server_msg_c2!($($ra)?)),
                         ReplyMessage::Error(err) => Err(format!("{:?}", err)),
                         _ => panic!("Unexpected reply"),
                     })
@@ -64,8 +72,9 @@ macro_rules! server_msg {
 }
 
 // Messages to server
-server_msg!(GameModes, GameModes, game_modes);
-server_msg!(JoinedGames, JoinedGames, joined_games);
-server_msg!(CreateGame, GameCreated, create_game, game_type: String);
-server_msg!(JoinGame, JoinedToGame, join_game, game_id: GameId);
-server_msg!(Inner, Inner, inner, game_id: GameId, inner: JsValue);
+server_msg!(GameModes, GameModes(v), game_modes);
+server_msg!(JoinedGames, JoinedGames(v), joined_games);
+server_msg!(CreateGame, GameCreated(v), create_game, game_type: String);
+server_msg!(JoinGame, JoinedToGame(v), join_game, game_id: GameId);
+server_msg!(LeaveGame, Ok, leave_game, game_id: GameId);
+server_msg!(Inner, Inner(v), inner, game_id: GameId, inner: JsValue);

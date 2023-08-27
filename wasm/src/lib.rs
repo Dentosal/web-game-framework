@@ -17,8 +17,10 @@ use wgfw_protocol::{
 };
 
 macro_rules! console_log {
-    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+    ($($t:tt)*) => (crate::log(&format_args!($($t)*).to_string()))
 }
+
+pub(crate) use console_log;
 
 #[wasm_bindgen]
 extern "C" {

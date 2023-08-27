@@ -92,7 +92,7 @@
                         <template x-for="player in metas[activeChat].players.sort()">
                             <li :key="player">
                                 <span x-text="chats[activeChat].nicknames[player] || 'Anonymous'"></span>
-                                <span x-text="metas[activeChat].leader === me ? '(owner)' : ''"></span>
+                                <span x-text="metas[activeChat].leader === player ? '(owner)' : ''"></span>
                                 <span x-text="player == me ? '(you)' : ''"></span>
                             </li>
                         </template>

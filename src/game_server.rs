@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::{iter, mem};
@@ -15,7 +16,7 @@ use wgfw_protocol::{
 };
 
 use crate::game_registry::GameRegistry;
-use crate::game_state::Lobby;
+use crate::game_state::{GameCommon, Lobby};
 
 /// Browser session
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -55,6 +56,7 @@ pub fn spawn(registry: GameRegistry) -> (JoinHandle<()>, ServerRemote) {
 
     let jh = tokio::spawn(async {
         GameServer {
+            secret: orion::auth::SecretKey::generate(32).expect("Unable to generate secret key"),
             clients: HashMap::new(),
             players: HashMap::new(),
             games: HashMap::new(),
@@ -68,6 +70,8 @@ pub fn spawn(registry: GameRegistry) -> (JoinHandle<()>, ServerRemote) {
 }
 
 struct GameServer {
+    /// Secret key used for signing reconnection tokens
+    secret: orion::auth::SecretKey,
     /// Currently connected ws clients -> PlayerId mapping
     clients: HashMap<ConnectionId, PlayerId>,
     /// PlayerId -> ws client mapping. This doesn't exist for disconnected players.
@@ -80,19 +84,19 @@ struct GameServer {
 impl GameServer {
     async fn send_state_to_player(&mut self, game_id: GameId, player_id: PlayerId) {
         let game = self.games.get(&game_id).unwrap();
-        if !game.players.contains(&player_id) {
+        if !game.common.players.contains(&player_id) {
             return;
         }
 
-        let public_state = game.state.public_state();
-        let private_state = game.state.state_for_player(player_id);
+        let public_state = game.public_state();
+        let private_state = game.state_for_player(player_id);
 
-        let mut players: Vec<_> = game.players.iter().copied().collect();
+        let mut players: Vec<_> = game.common.players.iter().copied().collect();
         players.sort();
 
         let message = ServerSentMessage::GameInfo {
             id: game_id,
-            leader: game.leader,
+            leader: game.common.leader,
             players,
             public_state,
             private_state,
@@ -107,7 +111,7 @@ impl GameServer {
 
     async fn broadcast_game_state(&mut self, game_id: GameId) {
         let game = self.games.get(&game_id).unwrap();
-        let players: Vec<PlayerId> = game.players.iter().copied().collect();
+        let players: Vec<PlayerId> = game.common.players.iter().copied().collect();
 
         for player_id in players {
             self.send_state_to_player(game_id, player_id).await;
@@ -115,8 +119,6 @@ impl GameServer {
     }
 
     async fn run(mut self, mut event_rx: mpsc::Receiver<Event>) {
-        let secret = orion::auth::SecretKey::generate(32).expect("Unable to generate secret key");
-
         while let Some(event) = event_rx.recv().await {
             log::debug!("Event: {:?}", event);
 
@@ -142,7 +144,7 @@ impl GameServer {
                         .games
                         .iter()
                         .filter_map(|(game_id, game)| {
-                            if game.players.contains(&player_id) {
+                            if game.common.players.contains(&player_id) {
                                 Some(*game_id)
                             } else {
                                 None
@@ -154,7 +156,6 @@ impl GameServer {
                         self.games
                             .get_mut(&game_id)
                             .unwrap()
-                            .state
                             .on_disconnect(player_id);
                         self.broadcast_game_state(game_id).await;
                     }
@@ -172,162 +173,207 @@ impl GameServer {
                     .unwrap();
                     player.tx.send(Message::text(response)).await.unwrap();
                 }
-                EventData::Message(ClientMessage { id: msgid, data }) => {
-                    let mut player_id = *self.clients.get(&event.client).unwrap();
-
-                    let is_identified = self.players.get(&player_id).unwrap().identified;
-                    let attempts_to_identify = matches!(
-                        data,
-                        ClientMessageData::NewIdentity | ClientMessageData::Identify(..)
-                    );
-
-                    let response: ReplyMessage = if is_identified && attempts_to_identify {
-                        ReplyMessage::Error(ErrorReply::AlreadyIdentified)
-                    } else if !is_identified && !attempts_to_identify {
-                        ReplyMessage::Error(ErrorReply::MustIdentifyFirst)
-                    } else {
-                        match data {
-                            ClientMessageData::NewIdentity => {
-                                self.players.get_mut(&player_id).unwrap().identified = true;
-                                ReplyMessage::Identity(Identity {
-                                    player_id,
-                                    reconnection_secret: ReconnectionSecret::for_player(
-                                        &secret, player_id,
-                                    ),
-                                })
-                            }
-                            ClientMessageData::Identify(identity) => {
-                                if identity.verify(&secret) {
-                                    let old_player_id =
-                                        mem::replace(&mut player_id, identity.player_id);
-                                    self.clients.insert(event.client, identity.player_id);
-                                    let mut old_entry =
-                                        self.players.remove(&old_player_id).unwrap();
-                                    old_entry.identified = true;
-                                    self.players.insert(identity.player_id, old_entry);
-
-                                    // Notify running games about reconnection
-                                    let affected_games: HashSet<GameId> = self
-                                        .games
-                                        .iter()
-                                        .filter_map(|(game_id, game)| {
-                                            if game.players.contains(&player_id) {
-                                                Some(*game_id)
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                        .collect();
-
-                                    for game_id in affected_games {
-                                        self.games
-                                            .get_mut(&game_id)
-                                            .unwrap()
-                                            .state
-                                            .on_reconnect(player_id);
-                                        self.broadcast_game_state(game_id).await;
-                                    }
-
-                                    ReplyMessage::Identity(identity)
-                                } else {
-                                    ReplyMessage::Error(ErrorReply::InvalidReconnectionSecret)
-                                }
-                            }
-                            ClientMessageData::GameModes => ReplyMessage::GameModes(
-                                self.registry.games.keys().cloned().collect(),
-                            ),
-                            ClientMessageData::JoinedGames => {
-                                let games: Vec<_> = self
-                                    .games
-                                    .iter()
-                                    .filter_map(|(game_id, game)| {
-                                        if game.players.contains(&player_id) {
-                                            Some(*game_id)
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect();
-
-                                // Send game state to player
-                                for game_id in games.iter() {
-                                    self.broadcast_game_state(*game_id).await;
-                                }
-
-                                ReplyMessage::JoinedGames(games)
-                            }
-                            ClientMessageData::CreateGame(game_type) => {
-                                let game_id = GameId::new();
-                                if let Some(constructor) = self.registry.games.get(&game_type) {
-                                    let state = constructor();
-                                    self.games.insert(
-                                        game_id,
-                                        Lobby {
-                                            leader: player_id,
-                                            players: iter::once(player_id).collect(),
-                                            state,
-                                        },
-                                    );
-                                    self.games
-                                        .get_mut(&game_id)
-                                        .unwrap()
-                                        .state
-                                        .on_join(player_id);
-                                    self.broadcast_game_state(game_id).await;
-                                    ReplyMessage::GameCreated(game_id)
-                                } else {
-                                    ReplyMessage::Error(ErrorReply::InvalidGameFormat)
-                                }
-                            }
-                            ClientMessageData::JoinGame(game_id) => {
-                                let player_id = *self.clients.get(&event.client).unwrap();
-
-                                if let Some(game) = self.games.get_mut(&game_id) {
-                                    game.players.insert(player_id);
-                                    self.games
-                                        .get_mut(&game_id)
-                                        .unwrap()
-                                        .state
-                                        .on_join(player_id);
-                                    self.broadcast_game_state(game_id).await;
-                                    ReplyMessage::JoinedToGame(game_id)
-                                } else {
-                                    ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
-                                }
-                            }
-                            ClientMessageData::LeaveGame(_) => todo!("LeaveGame"),
-                            ClientMessageData::KickPlayer(_, _) => todo!("KickPlayer"),
-                            ClientMessageData::PromoteLeader(_, _) => todo!("PromoteLeader"),
-                            ClientMessageData::Inner(game_id, inner_data) => {
-                                if let Some(game) = self.games.get_mut(&game_id) {
-                                    if game.players.contains(&player_id) {
-                                        let reply =
-                                            game.state.on_message_from(player_id, inner_data);
-                                        self.broadcast_game_state(game_id).await; // TODO: only when needed
-                                        match reply {
-                                            Ok(value) => ReplyMessage::Inner(value),
-                                            Err(err) => ReplyMessage::Error(ErrorReply::Inner(err)),
-                                        }
-                                    } else {
-                                        ReplyMessage::Error(ErrorReply::NotInThatGame)
-                                    }
-                                } else {
-                                    ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
-                                }
-                            }
-                        }
-                    };
-
-                    let reply = response.finalize(msgid);
-                    self.players
-                        .get_mut(&player_id)
-                        .unwrap()
-                        .tx
-                        .send(Message::text(serde_json::to_string(&reply).unwrap()))
-                        .await
-                        .unwrap();
-                }
+                EventData::Message(cmsg) => self.process_client_message(event.client, cmsg).await,
             };
+        }
+    }
+
+    async fn process_client_message(&mut self, client: ConnectionId, msg: ClientMessage) {
+        let mut publish = PublishGameState::default();
+
+        let ClientMessage { id: msgid, data } = msg;
+        let mut player_id = *self.clients.get(&client).unwrap();
+
+        let is_identified = self.players.get(&player_id).unwrap().identified;
+        let attempts_to_identify = matches!(
+            data,
+            ClientMessageData::NewIdentity | ClientMessageData::Identify(..)
+        );
+
+        let response: ReplyMessage = if is_identified && attempts_to_identify {
+            ReplyMessage::Error(ErrorReply::AlreadyIdentified)
+        } else if !is_identified && !attempts_to_identify {
+            ReplyMessage::Error(ErrorReply::MustIdentifyFirst)
+        } else {
+            match data {
+                ClientMessageData::NewIdentity => {
+                    self.players.get_mut(&player_id).unwrap().identified = true;
+                    ReplyMessage::Identity(Identity {
+                        player_id,
+                        reconnection_secret: ReconnectionSecret::for_player(
+                            &self.secret,
+                            player_id,
+                        ),
+                    })
+                }
+                ClientMessageData::Identify(identity) => {
+                    if identity.verify(&self.secret) {
+                        let old_player_id = mem::replace(&mut player_id, identity.player_id);
+                        self.clients.insert(client, identity.player_id);
+                        let mut old_entry = self.players.remove(&old_player_id).unwrap();
+                        old_entry.identified = true;
+                        self.players.insert(identity.player_id, old_entry);
+
+                        // Notify running games about reconnection
+                        let affected_games: HashSet<GameId> = self
+                            .games
+                            .iter()
+                            .filter_map(|(game_id, game)| {
+                                if game.common.players.contains(&player_id) {
+                                    Some(*game_id)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+
+                        for game_id in affected_games {
+                            self.games
+                                .get_mut(&game_id)
+                                .unwrap()
+                                .on_reconnect(player_id);
+                            publish.add_all(game_id);
+                        }
+                        ReplyMessage::Identity(identity)
+                    } else {
+                        ReplyMessage::Error(ErrorReply::InvalidReconnectionSecret)
+                    }
+                }
+                ClientMessageData::GameModes => {
+                    ReplyMessage::GameModes(self.registry.games.keys().cloned().collect())
+                }
+                ClientMessageData::JoinedGames => {
+                    let games: Vec<_> = self
+                        .games
+                        .iter()
+                        .filter_map(|(game_id, game)| {
+                            if game.common.players.contains(&player_id) {
+                                Some(*game_id)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    // Send game state to player
+                    for game_id in games.iter() {
+                        publish.add(*game_id, player_id);
+                    }
+
+                    ReplyMessage::JoinedGames(games)
+                }
+                ClientMessageData::CreateGame(game_type) => {
+                    let game_id = GameId::new();
+                    if let Some(constructor) = self.registry.games.get(&game_type) {
+                        let state = constructor();
+                        self.games.insert(
+                            game_id,
+                            Lobby {
+                                common: GameCommon {
+                                    leader: player_id,
+                                    players: iter::once(player_id).collect(),
+                                },
+                                state,
+                            },
+                        );
+                        self.games.get_mut(&game_id).unwrap().on_join(player_id);
+                        publish.add_all(game_id);
+                        ReplyMessage::GameCreated(game_id)
+                    } else {
+                        ReplyMessage::Error(ErrorReply::InvalidGameFormat)
+                    }
+                }
+                ClientMessageData::JoinGame(game_id) => {
+                    let player_id = *self.clients.get(&client).unwrap();
+
+                    if let Some(game) = self.games.get_mut(&game_id) {
+                        game.common.players.insert(player_id);
+                        self.games.get_mut(&game_id).unwrap().on_join(player_id);
+                        publish.add_all(game_id);
+                        ReplyMessage::JoinedToGame(game_id)
+                    } else {
+                        ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
+                    }
+                }
+                ClientMessageData::LeaveGame(game_id) => {
+                    let player_id = *self.clients.get(&client).unwrap();
+
+                    if let Some(game) = self.games.get_mut(&game_id) {
+                        game.common.players.remove(&player_id);
+                        self.games.get_mut(&game_id).unwrap().on_leave(player_id);
+                        publish.add_all(game_id);
+                        ReplyMessage::Ok
+                    } else {
+                        ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
+                    }
+                }
+                ClientMessageData::KickPlayer(_, _) => todo!("KickPlayer"),
+                ClientMessageData::PromoteLeader(_, _) => todo!("PromoteLeader"),
+                ClientMessageData::Inner(game_id, inner_data) => {
+                    if let Some(game) = self.games.get_mut(&game_id) {
+                        if game.common.players.contains(&player_id) {
+                            let reply = game.on_message_from(player_id, inner_data);
+                            publish.add_all(game_id); // TODO: only when needed
+                            match reply {
+                                Ok(value) => ReplyMessage::Inner(value),
+                                Err(err) => ReplyMessage::Error(ErrorReply::Inner(err)),
+                            }
+                        } else {
+                            ReplyMessage::Error(ErrorReply::NotInThatGame)
+                        }
+                    } else {
+                        ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
+                    }
+                }
+            }
+        };
+
+        let reply = response.finalize(msgid);
+        self.players
+            .get_mut(&player_id)
+            .unwrap()
+            .tx
+            .send(Message::text(serde_json::to_string(&reply).unwrap()))
+            .await
+            .unwrap();
+
+        publish.run(self).await;
+    }
+}
+
+/// Keeps track of which game states need sending to which players
+#[derive(Debug, Default)]
+struct PublishGameState {
+    /// `None` as value means all players
+    games: HashMap<GameId, Option<HashSet<PlayerId>>>,
+}
+impl PublishGameState {
+    pub fn add(&mut self, game_id: GameId, player_id: PlayerId) {
+        match self.games.entry(game_id) {
+            Entry::Occupied(mut entry) => {
+                if let Some(players) = entry.get_mut() {
+                    players.insert(player_id);
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(Some(iter::once(player_id).collect()));
+            }
+        }
+    }
+
+    pub fn add_all(&mut self, game_id: GameId) {
+        self.games.insert(game_id, None);
+    }
+
+    pub async fn run(self, server: &mut GameServer) {
+        for (game_id, players) in self.games {
+            if let Some(players) = players {
+                for player_id in players {
+                    server.send_state_to_player(game_id, player_id).await;
+                }
+            } else {
+                server.broadcast_game_state(game_id).await;
+            }
         }
     }
 }

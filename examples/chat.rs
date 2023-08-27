@@ -66,7 +66,7 @@ impl Game for Chat {
         });
     }
 
-    fn on_left(&mut self, player: PlayerId) {
+    fn on_leave(&mut self, player: PlayerId) {
         self.messages.push(ChatMessage {
             sender: player,
             text: format!("left"),

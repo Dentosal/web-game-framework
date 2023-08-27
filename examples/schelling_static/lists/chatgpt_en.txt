@@ -1,0 +1,199 @@
+Primary color
+Pet
+Famous actor
+Season of the year
+Pizza topping
+Planet in our solar system
+Classic fairy tale
+Day of the week
+Mode of transportation
+Country in Europe
+Type of fruit
+Social media platform
+Cartoon character
+Board game
+Type of flower
+Novel title
+Musical instrument
+Condiment
+Ocean
+Type of footwear
+Color for roses
+Fast-food chain
+Brand of technology
+Famous landmark in Paris
+Hit song title
+Body part
+Type of breakfast cereal
+Movie title
+Flavor of ice cream
+Ingredient in a sandwich
+Artist
+Country known for spicy cuisine
+Type of tree
+Well-known TV show title
+Mountain range
+Animal found on a farm
+River
+Tool often found in a toolbox
+Weather phenomenon
+Ingredient in a sandwich
+Popular superhero
+Style of dance
+Topping for a hamburger
+Classic novel title
+Common outdoor activity
+Type of breakfast beverage
+Famous historical figure
+Breed of dog
+Type of pasta
+Well-known constellation
+Sport played with a ball
+Ingredient in a salad
+Famous scientist
+Popular vacation destination
+Type of sandwich bread
+Famous actor from the past
+Genre of music
+Topping for a pizza
+Famous painting
+Type of kitchen utensil
+Color of a traffic light
+Mode of intercity travel
+Type of camera shot
+Essential school subject
+Popular cocktail
+Type of nut
+Famous sculpture
+Common type of shoe
+Type of cloud
+Essential office supply
+Style of architecture
+Type of gemstone
+Popular website
+Famous composer
+Type of hat
+Common cold beverage
+Famous war
+Type of whale
+Popular dance move
+Famous mathematician
+Type of reptile
+Essential item in a toolbox
+Famous explorer
+Type of mammal
+Common pizza shape
+Famous philosopher
+Type of insect
+Essential grooming tool
+Nobel Prize category
+Renaissance artist
+Type of subatomic particle
+Famous opera
+Ancient civilization
+Major geological era
+Cryptocurrency name
+Element on the periodic table
+Philosopher from antiquity
+Branch of mathematics
+Capital city in Asia
+Invented writing system
+Endangered animal species
+Nobel Prize-winning author
+Type of exotic fruit
+Famous surrealist painting
+Mythical creature
+Classical Greek play
+Architectural style
+Rare celestial event
+Finnish winter activity
+Notable Finnish composer
+Traditional Finnish dish
+Famous Finnish architect
+Finnish lake
+Finnish national park
+Finnish sauna tradition
+Well-known Finnish company
+Finnish cultural festival
+Finnish historical figure
+Finnish design brand
+Famous Finnish author
+Finnish mythological creature
+Finnish coastal city
+Finnish natural wonder
+Finnish cultural celebration
+Finnish innovation
+Finnish proverbs or sayings
+Zero-sum game
+Tragedy of the commons situation
+Fibonacci sequence number
+Irrational number
+Prime number
+Geometric shape
+Coffee or tea?
+Summer or winter?
+Cats or dogs?
+Pizza or pasta?
+Beach or mountains?
+Books or movies?
+Morning or evening?
+Chocolate or vanilla?
+City or countryside?
+Sun or rain?
+Comedy or drama?
+Apple or Android?
+Plane or train?
+Rock or pop music?
+Sweet or savory?
+Fiction or non-fiction?
+Facebook or Twitter?
+Sunrise or sunset?
+Car or bike?
+Coffee shop or bakery?
+Breakfast or dinner?
+Star Wars or Star Trek?
+Guitar or piano?
+Text message or phone call?
+Rainforest or desert?
+Comedy or horror?
+Coffee or energy drink?
+Classical art or modern art?
+Hiking or swimming?
+Train or bus?
+Sunrise or sunset?
+Ocean or lake?
+Fiction or poetry?
+Science fiction or fantasy?
+Morning, afternoon, or evening?
+Red, blue, or green?
+Bus, train, or car?
+Movie theater, streaming, or DVD?
+Fiction, non-fiction, or poetry?
+Beach, mountains, or city?
+Rock, pop, or hip-hop?
+Hot, cold, or warm?
+Comedy, drama, or thriller?
+Tea, coffee, or hot chocolate?
+Pizza, burger, or sushi?
+Phone call, text message, or email?
+Summer, autumn, or winter?
+Cycling, jogging, or swimming?
+Action, adventure, or fantasy?
+Museum, park, or mall?
+Laptop, desktop, or tablet?
+Red, blue, green, or yellow?
+Car, bus, train, or bike?
+Comedy, drama, action, or romance?
+Coffee, tea, hot chocolate, or juice?
+Pizza, burger, sushi, or salad?
+Morning, afternoon, evening, or night?
+Rock, pop, hip-hop, or jazz?
+Laptop, desktop, tablet, or smartphone?
+Beach, mountains, city, or countryside?
+Movie theater, streaming, DVD, or rental?
+Walking, jogging, cycling, or swimming?
+Phone call, text message, email, or video call?
+Museum, park, mall, or theater?
+Comedy, drama, thriller, or fantasy?
+Summer, autumn, winter, or spring break?
+Hot, cold, warm, or cool?
