@@ -25,10 +25,16 @@
         });
     </script>
 </head>
-<body x-data="page" @start="start()">
-    <div id="global-banner" x-show="!me">
+<body x-data="page" :class="{ banner: (!!error || !me) }" @start="start()">
+    <div id="connecting-banner" x-show="!me">
         <h1>Loading...</h1>
         <p>Please note that this website requires JavaScript support</p>
+    </div>
+
+    <div id="error-banner" x-show="error" style="display: none;">
+        <h1>Error</h1>
+        <p x-text="error"></p>
+        <input type="button" value="Reload" @click="window.location.reload()">
     </div>
 
     <div id="nickpicker" x-show="myNick === null">
@@ -46,7 +52,7 @@
         </div>
     </div>
 
-    <div id="game" x-show="gameId !== null && myNick !== null">
+    <div id="game" x-show="gameId !== null && myNick !== null" :class="{ running: state.running }">
         <div id="ingame" x-show="false">
             <div>
                 <h1>Current question</h1>

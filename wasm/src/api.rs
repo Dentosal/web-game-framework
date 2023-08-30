@@ -1,7 +1,9 @@
 //! User-visible API of the websocket-wrapper
 
+use gloo_utils::format::JsValueSerdeExt;
+
 use wasm_bindgen::prelude::*;
-use wgfw_protocol::{ClientMessageData, ReplyMessage};
+use wgfw_protocol::{ClientMessageData, ErrorReply, ReplyMessage};
 
 use crate::WgfwEvents;
 
@@ -49,7 +51,7 @@ macro_rules! server_msg {
         #[wasm_bindgen]
         impl WgfwEvents {
             #[wasm_bindgen]
-            pub async fn $name(&self, $($an: JsValue),*) -> Result<JsValue, String> {
+            pub async fn $name(&self, $($an: JsValue),*) -> Result<JsValue, JsValue> {
                 let (tx, rx) = futures::channel::oneshot::channel::<ReplyMessage>();
                 crate::console_log!("Sending message {:?} {:?}", stringify!($name), ($(&$an),*));
                 self.send_message(
@@ -62,7 +64,10 @@ macro_rules! server_msg {
                 rx.await
                     .map(|value| match value {
                         ReplyMessage::$replyname $(($ra))? => Ok(server_msg_c2!($($ra)?)),
-                        ReplyMessage::Error(err) => Err(format!("{:?}", err)),
+                        ReplyMessage::Error(err) => Err(match err {
+                            ErrorReply::Inner(inner) => JsValue::from_serde(&inner).unwrap(),
+                            other => JsValue::from_str(&format!("{:?}", other)),
+                        }),
                         _ => panic!("Unexpected reply"),
                     })
                     .unwrap()

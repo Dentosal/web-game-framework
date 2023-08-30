@@ -9,6 +9,7 @@ const copyToClipboard = elem => {
 }
 
 const Page = {
+    error: null,
     events: null,
     me: null,
     gameModes: [],
@@ -20,6 +21,7 @@ const Page = {
     currentGuess: null,
     leader: null,
     players: [],
+    expandSettings: true,
 
     start() {
         this.events = new window.WgfwEvents();
@@ -43,14 +45,16 @@ const Page = {
                 return;
             }
 
-            console.log("Onupdate");
-
             this.state = pub;
             this.currentGuess = priv;
             this.leader = leader;
             this.players = players;
 
             this.updateSettingsWritable();
+        };
+
+        this.events.onerror = err => {
+            this.error = "Connection to the server closed" + (err ? ": " + err : "");
         };
 
         window.onhashchange = async () => {
@@ -143,6 +147,10 @@ const Page = {
     },
 
     async startGame() {
-        await this.events.inner(this.gameId, {"start": true});
+        try {
+            await this.events.inner(this.gameId, "start");
+        } catch (e) {
+            console.log("!!", e);
+        }
     },
 };

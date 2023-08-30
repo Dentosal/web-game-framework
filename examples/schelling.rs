@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use warp::Filter;
 
@@ -37,6 +38,8 @@ struct QuestionList {
     enabled: bool,
     url: String,
     name: String,
+    #[serde(skip)]
+    cached: Option<Vec<String>>,
 }
 
 /// List of predefined questions
@@ -81,11 +84,13 @@ impl Default for GameSettings {
                     enabled: false,
                     url: "/static/lists/chatgpt_en.txt".to_owned(),
                     name: "ChatGPT-generated questions (English)".to_owned(),
+                    cached: None,
                 },
                 QuestionList {
                     enabled: false,
                     url: "/static/lists/chatgpt_fi.txt".to_owned(),
                     name: "ChatGPT-generated questions (Finnish)".to_owned(),
+                    cached: None,
                 },
             ],
             order: QuestionOrder::default(),
@@ -103,6 +108,7 @@ struct Schelling {
     pub history: Vec<Round>,
     pub current_round: Option<Round>,
     pub question_queue: Vec<Question>,
+    pub running: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,6 +132,7 @@ struct PublicSchelling {
     pub history: Vec<Round>,
     pub current_round: Option<CurrentRoundPublic>,
     pub question_queue: Vec<Question>,
+    pub running: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,6 +154,45 @@ impl Schelling {
             history: self.history.clone(),
             current_round,
             question_queue: self.question_queue.clone(),
+            running: self.running,
+        }
+    }
+
+    /// Advance to the next phase or round, if needed
+    pub fn update(&mut self, common: &GameCommon) {
+        // Check if current round is finished
+        if let Some(round) = self.current_round.as_ref() {
+            let percentage_answered = (round.guesses.len() as f32) / (common.players.len() as f32);
+            if percentage_answered >= (self.settings.percentage as f32) / 100.0 {
+                // Round is finished
+                self.history.push(round.clone());
+                self.current_round = None;
+            }
+        }
+
+        if self.current_round.is_none() && self.running {
+            // Start new round
+            let mut rng = rand::thread_rng();
+            if self.question_queue.is_empty() {
+                // Pick a random question from the list if any are enabled
+                // TODO
+                // let mut enabled_lists = self
+                //     .settings
+                //     .question_lists
+                //     .iter()
+                //     .filter(|list| list.enabled);
+            } else {
+                // Pick from proposal queue if it's not empty
+                let i = match self.settings.order {
+                    QuestionOrder::Random => rng.gen_range(0..self.question_queue.len()),
+                    QuestionOrder::Fifo => 0,
+                    QuestionOrder::Lifo => self.question_queue.len() - 1,
+                };
+                self.current_round = Some(Round {
+                    question: self.question_queue.remove(i),
+                    guesses: HashMap::new(),
+                });
+            }
         }
     }
 }
@@ -157,12 +203,18 @@ impl Schelling {
 enum UserMessage {
     /// Change nickname
     Nick(String),
+    /// Update settings (game leader only)
+    Settings(GameSettings),
     /// Propose a new question
     Question(Question),
     /// Guess the answer to the current question
     Guess(String),
-    /// Update settings (game leader only)
-    Settings(GameSettings),
+    /// Start or unpause the game
+    Start,
+    /// Pause the game
+    Pause,
+    /// Advance to the next phase or round, if this has not been done automatically
+    Advance,
 }
 
 impl Game for Schelling {
@@ -189,7 +241,25 @@ impl Game for Schelling {
                 UserMessage::Nick(name) => {
                     self.nicknames.insert(player, name);
                 }
+                UserMessage::Settings(settings) => {
+                    if player == common.leader {
+                        self.settings = settings;
+                    } else {
+                        return Err("Only leader can change settings".into());
+                    }
+                }
                 UserMessage::Question(question) => {
+                    match self.settings.propose {
+                        ProposePermission::All => {}
+                        ProposePermission::Leader => {
+                            if player != common.leader {
+                                return Err("Only leader can propose questions".into());
+                            }
+                        }
+                        ProposePermission::No => {
+                            return Err("Proposing questions is not allowed".into());
+                        }
+                    }
                     self.question_queue.push(question);
                 }
                 UserMessage::Guess(guess) => {
@@ -197,11 +267,25 @@ impl Game for Schelling {
                         round.guesses.insert(player, guess);
                     });
                 }
-                UserMessage::Settings(settings) => {
+                UserMessage::Start => {
                     if player == common.leader {
-                        self.settings = settings;
+                        self.running = true;
                     } else {
-                        return Err("Only leader can change settings".into());
+                        return Err("Only leader can start the game".into());
+                    }
+                }
+                UserMessage::Pause => {
+                    if player == common.leader {
+                        self.running = false;
+                    } else {
+                        return Err("Only leader can pause the game".into());
+                    }
+                }
+                UserMessage::Advance => {
+                    if player == common.leader {
+                        self.update(common);
+                    } else {
+                        return Err("Only leader can advance the game".into());
                     }
                 }
             }
