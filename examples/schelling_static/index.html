@@ -8,6 +8,7 @@
     <script src="//unpkg.com/alpinejs" defer></script>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/page.js"></script>
+    <script src="/static/qrcode.js"></script>
 
     <script type="module">
         import init, {WgfwEvents} from './wasm/wgfw_wasm.js';
@@ -55,29 +56,44 @@
                 <h1>Propose question</h1>
                 <input type="text" name="" id="">
             </div>
-            <div>
-                <h1>Participants</h1>
-                <ul>
-                    <li>Player 1</li>
-                    <li>Player 2</li>
-                    <li>Player 3</li>
-                </ul>
-            </div>
         </div>
-        <h3>Participants</h3>
-        <ul>
-            <template x-for="player in players.sort()">
-                <li :key="player">
-                    <span x-text="state.nicknames[player] || 'Anonymous'"></span>
-                    <span x-text="player === leader ? '(leader)' : ''"></span>
-                    <span x-text="player === me ? '(you)' : ''"></span>
-                </li>
-            </template>
-        </ul>
-        <div class="invitelink">
-            <label for="invite-link">Invite link (click to copy):</label>
-            <input id="invite-link" type="text" :value="window.location.origin + '/#join:' + gameId"
-                @click="copyToClipboard($event.target);" readonly />
+        <div>
+            <p>
+                Waiting for the leader
+                (<span x-text="leader === me ? 'you' : (state.nicknames ? state.nicknames[leader] : '')"></span>)
+                to start the game.
+            </p>
+            <div x-show="leader === me">
+                <input class="leader-action" type="button" value="Start game" @click="await startGame()">
+            </div>
+            <h3>Participants</h3>
+            <div id="playerlist">
+                <template x-for="player in players.sort()">
+                    <div :key="player"
+                        :class="{leader: player === leader, you: player === me}"
+                        :title="player === leader ? 'Game leader' : ''"
+                        x-text="(state.nicknames[player] || 'Anonymous') + (player === me? ' (you)': '')"
+                    ></div>
+                </template>
+            </div>
+            <div>
+                <dialog id="invite-modal">
+                    <form method="dialog">
+                        <button>✖</button>
+                    </form>
+                    <div @click.outside="document.getElementById('invite-modal').close()">
+                        <h1>Invite players</h1>
+                        <div id="link-url">
+                            <input id="invite-link" type="url" :value="gameLink()"
+                                @click="copyToClipboard($event.target);" readonly />
+                            <input type="button" value="Copy" @click="copyToClipboard($event.target);">
+                        </div>
+                        <div id="link-qrcode"></div>
+                    </div>
+                </dialog>
+
+                <input type="button" id="open-invite" value="Invite players" @click.stop="document.getElementById('invite-modal').showModal()">
+            </div>
         </div>
         <fieldset id="gamesettings" @input.debounce="await updateSettings()">
             <legend>Game settings</legend>
@@ -98,8 +114,8 @@
             </div>
             <div>
                 If there are no proposed questions, pick one from:
-                <input type="button" value="all"  @click="state.settings.question_lists.map(q => {q.enabled = true;})">
-                <input type="button" value="none" @click="state.settings.question_lists.map(q => {q.enabled = false;})">
+                <input type="button" value="all"  @click="state.settings.question_lists.map(q => {q.enabled = true;}); $dispatch('input')">
+                <input type="button" value="none" @click="state.settings.question_lists.map(q => {q.enabled = false;}); $dispatch('input')">
                 <ul>
                     <template x-for="list in state.settings.question_lists">
                         <li>

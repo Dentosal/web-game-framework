@@ -12,33 +12,68 @@ body {
 }
 
 #game {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    margin: 1rem;
+    padding: 1rem;
+}
+
+#invite-modal {
+    min-width: 500px;
+    text-align: right;
+}
+
+#invite-modal::backdrop {
+  background-color: rgba(200, 200, 220, 0.5);
+}
+
+#invite-modal > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#invite-modal > div > #link-url {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
     width: 100%;
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
 }
 
-#messages {
+#invite-modal input[type=url] {
+    flex: 1;
+}
+
+#invite-modal input[type=button] {
     margin: 1rem;
+    padding: 0.5rem;
+    background: #99f;
+    color: white;
+    font-weight: bolder;
+    font-size: 1.1em;
+    cursor: pointer;
 }
 
-#messages .server_issued {
-    font-style: italic;
+#link-qrcode {
+    padding: 20px;
+    background: white;
 }
 
-#sidebar {
+#link-qrcode > * {
+    max-width: 400px;
+}
+
+#open-invite {
     margin: 1rem;
-}
-
-.inputrow {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-}
-
-.inputrow > input {
-    margin-top: 0.2rem;
-    margin-left: 1rem;
+    padding: 0.5rem;
+    background: #99f;
+    color: white;
+    font-weight: bolder;
+    font-size: 1.1em;
+    cursor: pointer;
 }
 
 .copied-indicator {
@@ -93,6 +128,32 @@ body {
     box-shadow: 0 0 0.5rem black;
 }
 
+#playerlist {
+    list-style-type: none;
+    margin-bottom: 1rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+}
+
+#playerlist > * {
+    padding: 0.5rem;
+    background: #eee;
+    white-space: nowrap;
+}
+
+#playerlist > .you {
+    background: #eef;
+}
+
+#playerlist > .leader::after {
+    content: '♦';
+    margin-left: 1ch;
+    color: blue;
+    text-decoration: none;
+}
+
 #gamesettings .emphasize-labels {
     line-height: 150%;
 }
@@ -108,6 +169,20 @@ body {
     width: 8ch;
 }
 
+fieldset {
+    margin: 1rem;
+}
+
 fieldset > * {
     margin: 0.5rem 0.1rem;
+}
+
+.leader-action {
+    margin: 1rem;
+    padding: 0.5rem;
+    background: #99f;
+    color: white;
+    font-weight: bolder;
+    font-size: 1.1em;
+    cursor: pointer;
 }

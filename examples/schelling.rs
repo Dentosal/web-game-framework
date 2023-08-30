@@ -36,6 +36,7 @@ enum ReadyPermission {
 struct QuestionList {
     enabled: bool,
     url: String,
+    name: String,
 }
 
 /// List of predefined questions
@@ -75,7 +76,18 @@ impl Default for GameSettings {
             percentage: 51,
             timer: 60,
             propose: ProposePermission::default(),
-            question_lists: Vec::new(),
+            question_lists: vec![
+                QuestionList {
+                    enabled: false,
+                    url: "/static/lists/chatgpt_en.txt".to_owned(),
+                    name: "ChatGPT-generated questions (English)".to_owned(),
+                },
+                QuestionList {
+                    enabled: false,
+                    url: "/static/lists/chatgpt_fi.txt".to_owned(),
+                    name: "ChatGPT-generated questions (Finnish)".to_owned(),
+                },
+            ],
             order: QuestionOrder::default(),
             anonymize: false,
             ready: ReadyPermission::default(),

@@ -1,15 +1,10 @@
 const copyToClipboard = elem => {
     navigator.clipboard.writeText(elem.value);
-    let tooltip = document.createElement("div");
-    tooltip.classList.add("copied-indicator");
-    tooltip.innerText = "Copied!";
-    tooltip.style.position = "absolute";
-    let rect = elem.getBoundingClientRect();
-    tooltip.style.top = (rect.top - rect.height) + "px";
-    tooltip.style.left = (rect.left + rect.width/2) + "px";
-    document.body.appendChild(tooltip);
+
+    let button = elem.parentElement.querySelector("input[type=button]");
+    button.value = "Copied!";
     setTimeout(() => {
-        tooltip.remove();
+        button.value = "Copy";
     }, 1000);
 }
 
@@ -47,6 +42,8 @@ const Page = {
                 console.log("Received update for unknown game: " + gameId);
                 return;
             }
+
+            console.log("Onupdate");
 
             this.state = pub;
             this.currentGuess = priv;
@@ -95,7 +92,17 @@ const Page = {
             this.gameId = await this.events.join_game(joinId);
         }
 
+        // Update the game QR code
+        new QRCode(document.getElementById("link-qrcode"), this.gameLink(), {
+                width: 64,
+                height: 64,
+            });
+
         this.updateNick();
+    },
+
+    gameLink() {
+        return window.location.origin + '/#join:' + this.gameId
     },
 
     async createGame(mode) {
@@ -120,7 +127,9 @@ const Page = {
 
     async updateSettings() {
         if (this.gameId !== null && this.me == this.leader) {
+            console.log("Updating settings");
             await this.events.inner(this.gameId, {"settings": this.state.settings});
+            console.log("Updated");
         }
     },
 
@@ -131,5 +140,9 @@ const Page = {
                 elem.disabled = (this.me !== this.leader);
             });
         }
+    },
+
+    async startGame() {
+        await this.events.inner(this.gameId, {"start": true});
     },
 };
