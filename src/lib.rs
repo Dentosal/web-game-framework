@@ -6,6 +6,7 @@ use game_state::Game;
 use tokio::task::JoinHandle;
 use warp::{Filter, Rejection, Reply};
 
+mod event_queue;
 mod game_registry;
 mod game_server;
 pub mod game_state;

@@ -7,6 +7,7 @@ use futures::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use tokio::time;
 use uuid::Uuid;
 use warp::ws::{Message, WebSocket};
 
@@ -15,8 +16,9 @@ use wgfw_protocol::{
     ReplyMessage, ServerSentMessage,
 };
 
+use crate::event_queue::EventQueue;
 use crate::game_registry::GameRegistry;
-use crate::game_state::{GameCommon, Lobby};
+use crate::game_state::{EventId, GameCommon, Lobby};
 
 /// Browser session
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -60,6 +62,7 @@ pub fn spawn(registry: GameRegistry) -> (JoinHandle<()>, ServerRemote) {
             clients: HashMap::new(),
             players: HashMap::new(),
             games: HashMap::new(),
+            scheduled: EventQueue::new(),
             registry,
         }
         .run(event_rx)
@@ -78,6 +81,8 @@ struct GameServer {
     players: HashMap<PlayerId, Player>,
     /// GameId -> Game Lobby mapping
     games: HashMap<GameId, Lobby>,
+    /// Sceduled events
+    scheduled: EventQueue<(GameId, EventId)>,
     /// Game type registry
     registry: GameRegistry,
 }
@@ -119,63 +124,100 @@ impl GameServer {
     }
 
     async fn run(mut self, mut event_rx: mpsc::Receiver<Event>) {
-        while let Some(event) = event_rx.recv().await {
-            log::debug!("Event: {:?}", event);
-
-            match event.data {
-                EventData::Connected(tx) => {
-                    let player_id = PlayerId::new();
-
-                    let old = self.clients.insert(event.client, player_id);
-                    debug_assert!(old.is_none(), "The client id should never conflict");
-                    let old = self.players.insert(
-                        player_id,
-                        Player {
-                            tx,
-                            identified: false,
-                        },
-                    );
-                    debug_assert!(old.is_none(), "The client id should never conflict");
-                }
-                EventData::Disconnected => {
-                    let player_id = self.clients.remove(&event.client).unwrap();
-                    let _ = self.players.remove(&player_id).unwrap();
-                    let affected_games: HashSet<GameId> = self
-                        .games
-                        .iter()
-                        .filter_map(|(game_id, game)| {
-                            if game.common.players.contains(&player_id) {
-                                Some(*game_id)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-
-                    for game_id in affected_games {
-                        self.games
-                            .get_mut(&game_id)
-                            .unwrap()
-                            .on_disconnect(player_id);
+        loop {
+            // Process pending events
+            while let Some((game_id, event_id)) = self.scheduled.pop_completed() {
+                if let Some(game) = self.games.get_mut(&game_id) {
+                    if game
+                        .on_event(event_id)
+                        .apply_schedule(game_id, &mut self.scheduled)
+                    {
                         self.broadcast_game_state(game_id).await;
                     }
                 }
-                EventData::InvalidMessage(error) => {
-                    let player_id = self.clients.get(&event.client).unwrap();
-                    let player = self.players.get_mut(player_id).unwrap();
+            }
 
-                    let response = serde_json::to_string(
-                        &ServerSentMessage::Error {
-                            message: format!("{}", error),
-                        }
-                        .finalize(),
-                    )
-                    .unwrap();
-                    player.tx.send(Message::text(response)).await.unwrap();
+            let event = if let Some(at) = self.scheduled.next_timeout() {
+                if let Ok(event) = time::timeout_at(at, event_rx.recv()).await {
+                    event
+                } else {
+                    // Timeout
+                    continue;
                 }
-                EventData::Message(cmsg) => self.process_client_message(event.client, cmsg).await,
+            } else {
+                event_rx.recv().await
             };
+
+            if let Some(event) = event {
+                self.process_event(event).await;
+            } else {
+                break;
+            }
         }
+    }
+
+    async fn process_event(&mut self, event: Event) {
+        log::debug!("Event: {:?}", event);
+
+        match event.data {
+            EventData::Connected(tx) => {
+                let player_id = PlayerId::new();
+
+                let old = self.clients.insert(event.client, player_id);
+                debug_assert!(old.is_none(), "The client id should never conflict");
+                let old = self.players.insert(
+                    player_id,
+                    Player {
+                        tx,
+                        identified: false,
+                    },
+                );
+                debug_assert!(old.is_none(), "The client id should never conflict");
+            }
+            EventData::Disconnected => {
+                let player_id = self.clients.remove(&event.client).unwrap();
+                let _ = self.players.remove(&player_id).unwrap();
+                let affected_games: HashSet<GameId> = self
+                    .games
+                    .iter()
+                    .filter_map(|(game_id, game)| {
+                        if game.common.players.contains(&player_id) {
+                            Some(*game_id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                for game_id in affected_games {
+                    let publish = self
+                        .games
+                        .get_mut(&game_id)
+                        .unwrap()
+                        .on_disconnect(player_id)
+                        .always_publish()
+                        .apply_schedule(game_id, &mut self.scheduled);
+
+                    if publish {
+                        self.broadcast_game_state(game_id).await;
+                    }
+                }
+            }
+            EventData::InvalidMessage(error) => {
+                let player_id = self.clients.get(&event.client).unwrap();
+                let player = self.players.get_mut(player_id).unwrap();
+
+                let response = serde_json::to_string(
+                    &ServerSentMessage::Error {
+                        message: format!("{}", error),
+                    }
+                    .finalize(),
+                )
+                .unwrap();
+                player.tx.send(Message::text(response)).await.unwrap();
+            }
+            EventData::Message(cmsg) => self.process_client_message(event.client, cmsg).await,
+        };
     }
 
     async fn process_client_message(&mut self, client: ConnectionId, msg: ClientMessage) {
@@ -231,8 +273,9 @@ impl GameServer {
                             self.games
                                 .get_mut(&game_id)
                                 .unwrap()
-                                .on_reconnect(player_id);
-                            publish.add_all(game_id);
+                                .on_reconnect(player_id)
+                                .always_publish()
+                                .apply(game_id, &mut publish, &mut self.scheduled);
                         }
                         ReplyMessage::Identity(identity)
                     } else {
@@ -276,8 +319,12 @@ impl GameServer {
                                 state,
                             },
                         );
-                        self.games.get_mut(&game_id).unwrap().on_join(player_id);
-                        publish.add_all(game_id);
+                        self.games
+                            .get_mut(&game_id)
+                            .unwrap()
+                            .on_join(player_id)
+                            .always_publish()
+                            .apply(game_id, &mut publish, &mut self.scheduled);
                         ReplyMessage::GameCreated(game_id)
                     } else {
                         ReplyMessage::Error(ErrorReply::InvalidGameFormat)
@@ -288,8 +335,12 @@ impl GameServer {
 
                     if let Some(game) = self.games.get_mut(&game_id) {
                         game.common.players.insert(player_id);
-                        self.games.get_mut(&game_id).unwrap().on_join(player_id);
-                        publish.add_all(game_id);
+                        self.games
+                            .get_mut(&game_id)
+                            .unwrap()
+                            .on_join(player_id)
+                            .always_publish()
+                            .apply(game_id, &mut publish, &mut self.scheduled);
                         ReplyMessage::JoinedToGame(game_id)
                     } else {
                         ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
@@ -300,8 +351,12 @@ impl GameServer {
 
                     if let Some(game) = self.games.get_mut(&game_id) {
                         game.common.players.remove(&player_id);
-                        self.games.get_mut(&game_id).unwrap().on_leave(player_id);
-                        publish.add_all(game_id);
+                        self.games
+                            .get_mut(&game_id)
+                            .unwrap()
+                            .on_leave(player_id)
+                            .always_publish()
+                            .apply(game_id, &mut publish, &mut self.scheduled);
                         ReplyMessage::Ok
                     } else {
                         ReplyMessage::Error(ErrorReply::NoSuchGameLobby)
@@ -312,8 +367,8 @@ impl GameServer {
                 ClientMessageData::Inner(game_id, inner_data) => {
                     if let Some(game) = self.games.get_mut(&game_id) {
                         if game.common.players.contains(&player_id) {
-                            let reply = game.on_message_from(player_id, inner_data);
-                            publish.add_all(game_id); // TODO: only when needed
+                            let (updates, reply) = game.on_message_from(player_id, inner_data);
+                            updates.apply(game_id, &mut publish, &mut self.scheduled);
                             match reply {
                                 Ok(value) => ReplyMessage::Inner(value),
                                 Err(err) => ReplyMessage::Error(ErrorReply::Inner(err)),
@@ -337,13 +392,13 @@ impl GameServer {
             .await
             .unwrap();
 
-        publish.run(self).await;
+        publish.apply(self).await;
     }
 }
 
 /// Keeps track of which game states need sending to which players
 #[derive(Debug, Default)]
-struct PublishGameState {
+pub(crate) struct PublishGameState {
     /// `None` as value means all players
     games: HashMap<GameId, Option<HashSet<PlayerId>>>,
 }
@@ -365,7 +420,7 @@ impl PublishGameState {
         self.games.insert(game_id, None);
     }
 
-    pub async fn run(self, server: &mut GameServer) {
+    async fn apply(self, server: &mut GameServer) {
         for (game_id, players) in self.games {
             if let Some(players) = players {
                 for player_id in players {

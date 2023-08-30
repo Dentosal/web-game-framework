@@ -1,6 +1,76 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
-use wgfw_protocol::PlayerId;
+use tokio::time::Instant;
+use uuid::Uuid;
+
+use wgfw_protocol::{GameId, PlayerId};
+
+use crate::{event_queue::EventQueue, game_server::PublishGameState};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EventId(Uuid);
+impl EventId {
+    fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
+/// Updates needed after processing a message or event
+#[must_use]
+pub struct Updates {
+    /// Broadcast new state to all players
+    pub state_changed: bool,
+    /// Schedule timer-delayed events
+    pub events: Vec<(Duration, EventId)>,
+}
+impl Updates {
+    pub const CHANGED: Self = Self::new(true);
+    pub const NONE: Self = Self::new(false);
+
+    pub const fn new(state_changed: bool) -> Self {
+        Self {
+            state_changed,
+            events: Vec::new(),
+        }
+    }
+
+    pub fn add_timeout(&mut self, delay: Duration) -> EventId {
+        let id = EventId::new();
+        self.events.push((delay, id));
+        id
+    }
+
+    pub fn always_publish(mut self) -> Self {
+        self.state_changed = true;
+        self
+    }
+
+    pub(crate) fn apply(
+        self,
+        game_id: GameId,
+        publish: &mut PublishGameState,
+        scheduled: &mut EventQueue<(GameId, EventId)>,
+    ) {
+        if self.state_changed {
+            publish.add_all(game_id);
+        }
+
+        self.apply_schedule(game_id, scheduled);
+    }
+
+    /// Returns true if the state changed and needs broadcasting
+    pub(crate) fn apply_schedule(
+        self,
+        game_id: GameId,
+        scheduled: &mut EventQueue<(GameId, EventId)>,
+    ) -> bool {
+        for (delay, event_id) in self.events {
+            scheduled.add((game_id, event_id), Instant::now() + delay);
+        }
+
+        self.state_changed
+    }
+}
 
 pub trait Game: Send + Sync {
     /// Extract public game state that is visible to all players
@@ -18,18 +88,32 @@ pub trait Game: Send + Sync {
         true // Default to always allowing reconnects
     }
 
-    fn on_disconnect(&mut self, _common: &GameCommon, _player: PlayerId) {}
-    fn on_reconnect(&mut self, _common: &GameCommon, _player: PlayerId) {}
-    fn on_join(&mut self, _common: &GameCommon, _player: PlayerId) {}
-    fn on_leave(&mut self, _common: &GameCommon, _player: PlayerId) {}
-    fn on_kick(&mut self, _common: &GameCommon, _player: PlayerId) {}
+    fn on_disconnect(&mut self, _common: &GameCommon, _player: PlayerId) -> Updates {
+        Updates::NONE
+    }
+    fn on_reconnect(&mut self, _common: &GameCommon, _player: PlayerId) -> Updates {
+        Updates::NONE
+    }
+    fn on_join(&mut self, _common: &GameCommon, _player: PlayerId) -> Updates {
+        Updates::NONE
+    }
+    fn on_leave(&mut self, _common: &GameCommon, _player: PlayerId) -> Updates {
+        Updates::NONE
+    }
+    fn on_kick(&mut self, _common: &GameCommon, _player: PlayerId) -> Updates {
+        Updates::NONE
+    }
+
+    fn on_event(&mut self, _common: &GameCommon, _id: EventId) -> Updates {
+        panic!("No event handler defined, but an event was scheduled");
+    }
 
     fn on_message_from(
         &mut self,
         common: &GameCommon,
         player: PlayerId,
         message: serde_json::Value,
-    ) -> Result<serde_json::Value, serde_json::Value>;
+    ) -> (Updates, Result<serde_json::Value, serde_json::Value>);
 }
 
 #[derive(Debug)]
@@ -82,31 +166,35 @@ impl Lobby {
         self.state.can_reconnect(&self.common)
     }
 
-    pub fn on_disconnect(&mut self, player: PlayerId) {
-        self.state.on_disconnect(&self.common, player);
+    pub fn on_disconnect(&mut self, player: PlayerId) -> Updates {
+        self.state.on_disconnect(&self.common, player)
     }
 
-    pub fn on_reconnect(&mut self, player: PlayerId) {
-        self.state.on_reconnect(&self.common, player);
+    pub fn on_reconnect(&mut self, player: PlayerId) -> Updates {
+        self.state.on_reconnect(&self.common, player)
     }
 
-    pub fn on_join(&mut self, player: PlayerId) {
-        self.state.on_join(&self.common, player);
+    pub fn on_join(&mut self, player: PlayerId) -> Updates {
+        self.state.on_join(&self.common, player)
     }
 
-    pub fn on_leave(&mut self, player: PlayerId) {
-        self.state.on_leave(&self.common, player);
+    pub fn on_leave(&mut self, player: PlayerId) -> Updates {
+        self.state.on_leave(&self.common, player)
     }
 
-    pub fn on_kick(&mut self, player: PlayerId) {
-        self.state.on_kick(&self.common, player);
+    pub fn on_kick(&mut self, player: PlayerId) -> Updates {
+        self.state.on_kick(&self.common, player)
+    }
+
+    pub fn on_event(&mut self, id: EventId) -> Updates {
+        self.state.on_event(&self.common, id)
     }
 
     pub fn on_message_from(
         &mut self,
         player: PlayerId,
         message: serde_json::Value,
-    ) -> Result<serde_json::Value, serde_json::Value> {
+    ) -> (Updates, Result<serde_json::Value, serde_json::Value>) {
         self.state.on_message_from(&self.common, player, message)
     }
 }

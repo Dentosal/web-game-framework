@@ -1,13 +1,16 @@
 #![deny(unused_must_use)]
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use warp::Filter;
 
 use wgfw::{
-    game_state::{Game, GameCommon},
+    game_state::{EventId, Game, GameCommon, Updates},
     Builder, PlayerId,
 };
 
@@ -109,6 +112,8 @@ struct Schelling {
     pub current_round: Option<Round>,
     pub question_queue: Vec<Question>,
     pub running: bool,
+    /// After-the-round delay is active
+    pub delay: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,6 +139,7 @@ struct PublicSchelling {
     pub current_round: Option<CurrentRoundPublic>,
     pub question_queue: Vec<Question>,
     pub running: bool,
+    pub delay: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -156,6 +162,7 @@ impl Schelling {
             current_round,
             question_queue: self.question_queue.clone(),
             running: self.running,
+            delay: self.delay,
         }
     }
 
@@ -168,10 +175,11 @@ impl Schelling {
                 // Round is finished
                 self.history.push(round.clone());
                 self.current_round = None;
+                self.delay = true;
             }
         }
 
-        if self.current_round.is_none() && self.running {
+        if self.current_round.is_none() && self.running && !self.delay {
             // Start new round
             let mut rng = rand::thread_rng();
             if self.question_queue.is_empty() {
@@ -231,13 +239,21 @@ impl Game for Schelling {
         serde_json::to_value(private).unwrap()
     }
 
+    fn on_event(&mut self, common: &GameCommon, _id: EventId) -> Updates {
+        self.delay = false;
+        self.update(common);
+        Updates::CHANGED
+    }
+
     fn on_message_from(
         &mut self,
         common: &GameCommon,
         player: PlayerId,
         message: serde_json::Value,
-    ) -> Result<serde_json::Value, serde_json::Value> {
+    ) -> (Updates, Result<serde_json::Value, serde_json::Value>) {
         if let Ok(msg) = serde_json::from_value(message) {
+            let had_delay_before = self.delay;
+
             match msg {
                 UserMessage::Nick(name) => {
                     self.nicknames.insert(player, name);
@@ -246,7 +262,7 @@ impl Game for Schelling {
                     if player == common.leader {
                         self.settings = settings;
                     } else {
-                        return Err("Only leader can change settings".into());
+                        return (Updates::NONE, Err("Only leader can change settings".into()));
                     }
                 }
                 UserMessage::Question(question) => {
@@ -254,11 +270,17 @@ impl Game for Schelling {
                         ProposePermission::All => {}
                         ProposePermission::Leader => {
                             if player != common.leader {
-                                return Err("Only leader can propose questions".into());
+                                return (
+                                    Updates::NONE,
+                                    Err("Only leader can propose questions".into()),
+                                );
                             }
                         }
                         ProposePermission::No => {
-                            return Err("Proposing questions is not allowed".into());
+                            return (
+                                Updates::NONE,
+                                Err("Proposing questions is not allowed".into()),
+                            );
                         }
                     }
                     self.question_queue.push(question);
@@ -274,7 +296,7 @@ impl Game for Schelling {
                     if player == common.leader {
                         self.running = true;
                     } else {
-                        return Err("Only leader can start the game".into());
+                        return (Updates::NONE, Err("Only leader can start the game".into()));
                     }
                     self.update(common);
                 }
@@ -282,20 +304,28 @@ impl Game for Schelling {
                     if player == common.leader {
                         self.running = false;
                     } else {
-                        return Err("Only leader can pause the game".into());
+                        return (Updates::NONE, Err("Only leader can pause the game".into()));
                     }
                 }
                 UserMessage::Advance => {
                     if player == common.leader {
                         self.update(common);
                     } else {
-                        return Err("Only leader can advance the game".into());
+                        return (
+                            Updates::NONE,
+                            Err("Only leader can advance the game".into()),
+                        );
                     }
                 }
             }
-            Ok(().into())
+
+            let mut updates = Updates::CHANGED;
+            if !had_delay_before && self.delay {
+                let _ = updates.add_timeout(Duration::from_secs(self.settings.delay as u64));
+            }
+            (updates, Ok(().into()))
         } else {
-            Err("Invalid message!!".into())
+            (Updates::NONE, Err("Invalid message!!".into()))
         }
     }
 }
