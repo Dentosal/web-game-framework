@@ -118,6 +118,7 @@ struct Round {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 enum Question {
     /// Unlimitted possible answers
     Open(String),
@@ -261,11 +262,13 @@ impl Game for Schelling {
                         }
                     }
                     self.question_queue.push(question);
+                    self.update(common);
                 }
                 UserMessage::Guess(guess) => {
                     self.current_round.as_mut().map(|round| {
                         round.guesses.insert(player, guess);
                     });
+                    self.update(common);
                 }
                 UserMessage::Start => {
                     if player == common.leader {
@@ -273,6 +276,7 @@ impl Game for Schelling {
                     } else {
                         return Err("Only leader can start the game".into());
                     }
+                    self.update(common);
                 }
                 UserMessage::Pause => {
                     if player == common.leader {

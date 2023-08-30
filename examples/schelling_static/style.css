@@ -21,23 +21,34 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
     text-align: center;
 }
 
-#error-banner input[type=button],
-#invite-modal input[type=button] {
-    margin: 1rem;
-    padding: 0.5rem;
-    background: #99f;
-    color: white;
-    font-weight: bolder;
-    font-size: 1.1em;
-    cursor: pointer;
+#error-banner, #invite-modal {
+    input[type=button] {
+        margin: 1rem;
+        padding: 0.5rem;
+        background: #99f;
+        color: white;
+        font-weight: bolder;
+        font-size: 1.1em;
+        cursor: pointer;
+    }
 }
 
 #game {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
+    flex-wrap: wrap;
     margin: 1rem;
     padding: 1rem;
+
+    &.running {
+        background: #eef;
+    }
+}
+
+#game-main {
+    flex-basis: 100%;
+    text-align: center;
 }
 
 #invite-modal {
@@ -54,15 +65,16 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
     flex-direction: column;
     align-items: center;
     justify-content: center;
+
+    & > #link-url {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+    }
 }
 
-#invite-modal > div > #link-url {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-}
 
 #invite-modal input[type=url] {
     flex: 1;
@@ -114,28 +126,28 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
 #not-in-game {
     font-size: 1.3rem;
     text-align: center;
-}
 
-#not-in-game .cards {
-    margin: 1rem;
+    & .cards {
+        margin: 1rem;
 
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    flex-wrap: wrap;
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        flex-wrap: wrap;
 
-    font-variant: small-caps;
-}
+        font-variant: small-caps;
 
-#not-in-game .cards > * {
-    margin: 0.5rem;
-    padding: 2rem;
-    border: 1px solid black;
-    background: #eef;
-    font-size: 1.2em;
-    cursor: pointer;
-    box-shadow: 0 0 0.5rem black;
+        & > * {
+            margin: 0.5rem;
+            padding: 2rem;
+            border: 1px solid black;
+            background: #eef;
+            font-size: 1.2em;
+            cursor: pointer;
+            box-shadow: 0 0 0.5rem black;
+        }
+    }
 }
 
 #playerlist {
@@ -145,34 +157,46 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
     display: flex;
     flex-direction: column;
     flex-wrap: nowrap;
+
+    & > * {
+        padding: 0.5rem;
+        background: #eee;
+        white-space: nowrap;
+    }
+
+    & > .you {
+        background: #eef;
+    }
+
+    & > .leader::after {
+        content: '♦';
+        margin-left: 1ch;
+        color: blue;
+        text-decoration: none;
+    }
 }
 
-#playerlist > * {
-    padding: 0.5rem;
-    background: #eee;
-    white-space: nowrap;
+
+#gamesettings:not(.expanded) {
+    height: 0;
+
+    > *:not(legend) {
+        display: none;
+    }
 }
 
-#playerlist > .you {
-    background: #eef;
-}
 
-#playerlist > .leader::after {
-    content: '♦';
-    margin-left: 1ch;
-    color: blue;
-    text-decoration: none;
-}
+#gamesettings {
+    & .emphasize-labels {
+        line-height: 150%;
 
-#gamesettings .emphasize-labels {
-    line-height: 150%;
-}
-
-#gamesettings .emphasize-labels label {
-    border: 1px solid #aaf;
-    border-radius: 0.5rem;
-    padding: 0.2rem;
-    white-space: nowrap;
+        label {
+            border: 1px solid #aaf;
+            border-radius: 0.5rem;
+            padding: 0.2rem;
+            white-space: nowrap;
+        }
+    }
 }
 
 #gamesettings input[type=number] {
@@ -181,10 +205,10 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
 
 fieldset {
     margin: 1rem;
-}
 
-fieldset > * {
-    margin: 0.5rem 0.1rem;
+    & > * {
+        margin: 0.5rem 0.1rem;
+    }
 }
 
 .leader-action {

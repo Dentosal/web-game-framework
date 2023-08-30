@@ -45,6 +45,14 @@ const Page = {
                 return;
             }
 
+            if (!_.isEqual(this.state.settings, pub.settings)) {
+                // Show settings if they have changed
+                this.expandSettings = true;
+            } else if (!this.state.running && pub.running) {
+                // Hide settings if the game has just started
+                this.expandSettings = false;
+            }
+
             this.state = pub;
             this.currentGuess = priv;
             this.leader = leader;
@@ -147,10 +155,14 @@ const Page = {
     },
 
     async startGame() {
-        try {
-            await this.events.inner(this.gameId, "start");
-        } catch (e) {
-            console.log("!!", e);
-        }
+        await this.events.inner(this.gameId, "start");
+    },
+
+    async sendProposal(text) {
+        await this.events.inner(this.gameId, { question: {open: text} });
+    },
+
+    async sendAnswer(text) {
+        await this.events.inner(this.gameId, { guess: text });
     },
 };

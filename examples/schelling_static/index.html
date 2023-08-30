@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schelling point game</title>
     <script src="//unpkg.com/alpinejs" defer></script>
+    <script src="//unpkg.com/lodash" defer></script>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/page.js"></script>
     <script src="/static/qrcode.js"></script>
@@ -53,25 +54,33 @@
     </div>
 
     <div id="game" x-show="gameId !== null && myNick !== null" :class="{ running: state.running }">
-        <div id="ingame" x-show="false">
-            <div>
-                <h1>Current question</h1>
-                <input type="text" name="" id="">
-            </div>
-            <div>
-                <h1>Propose question</h1>
-                <input type="text" name="" id="">
+        <div id="game-main" x-show="state.running">
+            <template x-if="state.current_round">
+                <div>
+                    <!-- TODO: handle questions with fixed list of answers -->
+                    <h1>Current question: <span x-text="state.current_round.question.open"></span></h1>
+                    <input type="text" placeholder="Answer" @keyup.enter="await sendAnswer($event.target.value)">
+                    <input type="submit" value="Send" @click="await sendAnswer($event.target.parentElement.querySelector('input[type=text]').value)">
+                </div>
+            </template>
+            <div x-show="!state.current_round">
+                <h1>Waiting for new questions</h1>
             </div>
         </div>
+        <div x-show="state.running">
+            <h2>Propose question</h2>
+            <input type="text" placeholder="Proposed question here" @keyup.enter="await sendProposal($event.target.value)">
+            <input type="submit" value="Send" @click="await sendProposal($event.target.parentElement.querySelector('input[type=text]').value)">
+        </div>
+        <p x-show="!state.running">
+            Waiting for the leader
+            (<span x-text="leader === me ? 'you' : (state.nicknames ? state.nicknames[leader] : '')"></span>)
+            to start the game.
+        </p>
+        <div x-show="!state.running && leader === me">
+            <input class="leader-action" type="button" value="Start game" @click="await startGame()">
+        </div>
         <div>
-            <p>
-                Waiting for the leader
-                (<span x-text="leader === me ? 'you' : (state.nicknames ? state.nicknames[leader] : '')"></span>)
-                to start the game.
-            </p>
-            <div x-show="leader === me">
-                <input class="leader-action" type="button" value="Start game" @click="await startGame()">
-            </div>
             <h3>Participants</h3>
             <div id="playerlist">
                 <template x-for="player in players.sort()">
@@ -82,36 +91,42 @@
                     ></div>
                 </template>
             </div>
-            <div>
-                <dialog id="invite-modal">
-                    <form method="dialog">
-                        <button>✖</button>
-                    </form>
-                    <div @click.outside="document.getElementById('invite-modal').close()">
-                        <h1>Invite players</h1>
-                        <div id="link-url">
-                            <input id="invite-link" type="url" :value="gameLink()"
-                                @click="copyToClipboard($event.target);" readonly />
-                            <input type="button" value="Copy" @click="copyToClipboard($event.target);">
-                        </div>
-                        <div id="link-qrcode"></div>
-                    </div>
-                </dialog>
-
-                <input type="button" id="open-invite" value="Invite players" @click.stop="document.getElementById('invite-modal').showModal()">
-            </div>
         </div>
-        <fieldset id="gamesettings" @input.debounce="await updateSettings()">
-            <legend>Game settings</legend>
-            After
-            <input type="number" min="0" max="100" step="1" x-model.number="state.settings.percentage"/>
-            % of the players are ready, start a timer of
-            <input type="number" min="0" max="100" step="1" x-model.number="state.settings.timer"/> seconds.
-            <ul>
-                <li>If all players are ready, the timer ends immediately.</li>
-                <li>Use 0% of players to start the timer immeditately.</li>
-                <li>Use 100% of players to wait until everyone is ready.</li>
-            </ul>
+        <div>
+            <dialog id="invite-modal">
+                <form method="dialog">
+                    <button>✖</button>
+                </form>
+                <div @click.outside="document.getElementById('invite-modal').close()">
+                    <h1>Invite players</h1>
+                    <div id="link-url">
+                        <input id="invite-link" type="url" :value="gameLink()"
+                            @click="copyToClipboard($event.target);" readonly />
+                        <input type="button" value="Copy" @click="copyToClipboard($event.target);">
+                    </div>
+                    <div id="link-qrcode"></div>
+                </div>
+            </dialog>
+
+            <input type="button" id="open-invite" value="Invite players" @click.stop="document.getElementById('invite-modal').showModal()">
+        </div>
+        <fieldset id="gamesettings" :class="{ expanded: expandSettings }" @input.debounce="await updateSettings()">
+            <legend>
+                Game settings
+                <input type="button" :value="expandSettings ? 'Hide' : 'Expand'" @click="expandSettings = !expandSettings">
+            </legend>
+
+            <div>
+                After
+                <input type="number" min="0" max="100" step="1" x-model.number="state.settings.percentage"/>
+                % of the players are ready, start a timer of
+                <input type="number" min="0" max="100" step="1" x-model.number="state.settings.timer"/> seconds.
+                <ul>
+                    <li>If all players are ready, the timer ends immediately.</li>
+                    <li>Use 0% of players to start the timer immeditately.</li>
+                    <li>Use 100% of players to wait until everyone is ready.</li>
+                </ul>
+            </div>
             <div class="emphasize-labels">
                 Questions can be proposed by
                 <label><input type="radio" x-model="state.settings.propose" value="all">all players</label>
