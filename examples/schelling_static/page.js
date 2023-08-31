@@ -16,7 +16,9 @@ const Page = {
     gameId: null,
     myNick: window.localStorage.getItem("nick") || null,
     state: {
-        settings: {}
+        settings: {},
+        history: [],
+        question_queue: [],
     },
     currentGuess: null,
     leader: null,
@@ -31,7 +33,7 @@ const Page = {
             // Fetch all games
             let join_hash = window.location.hash.match(/#join:([0-9a-f-]+)$/);
             if (join_hash) {
-                this.setActiveGame(join_hash[1]);
+                await this.setActiveGame(join_hash[1]);
             } else {
                 await this.setActiveGame(null);
             }
@@ -119,6 +121,7 @@ const Page = {
 
     async createGame(mode) {
         this.gameId = await this.events.create_game(mode);
+        self.updateNick();
     },
 
     async trySetNick(nick) {
@@ -131,7 +134,7 @@ const Page = {
         this.updateNick();
     },
 
-    async updateNick(nick) {
+    async updateNick() {
         if (this.gameId !== null) {
             await this.events.inner(this.gameId, {"nick": this.myNick});
         }
@@ -148,7 +151,7 @@ const Page = {
     // Makes settings writable if the user is the leader, and disables them otherwise.
     async updateSettingsWritable() {
         if (this.gameId !== null) {
-            document.querySelectorAll("#gamesettings input").forEach(elem => {
+            document.querySelectorAll("#gamesettings *:not(legend) input").forEach(elem => {
                 elem.disabled = (this.me !== this.leader);
             });
         }
@@ -158,11 +161,13 @@ const Page = {
         await this.events.inner(this.gameId, "start");
     },
 
-    async sendProposal(text) {
-        await this.events.inner(this.gameId, { question: {open: text} });
+    async sendProposal(elem) {
+        await this.events.inner(this.gameId, { question: {open: elem.value} });
+        elem.value = "";
     },
 
-    async sendAnswer(text) {
-        await this.events.inner(this.gameId, { guess: text });
+    async sendAnswer(elem) {
+        await this.events.inner(this.gameId, { guess: elem.value });
+        elem.value = "";
     },
 };

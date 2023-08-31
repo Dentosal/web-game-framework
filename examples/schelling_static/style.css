@@ -1,8 +1,23 @@
 body {
-    margin: 0;
-    padding: 0;
-
     font-family: Verdana, Geneva, Tahoma, sans-serif;
+}
+
+h1 {
+    font-weight: bold;
+    font-size: 2em;
+    padding: 1rem;
+}
+
+h2 {
+    font-weight: bold;
+    font-size: 1.5em;
+    padding: 0.5rem;
+}
+
+h3 {
+    font-weight: bold;
+    font-size: 1.2em;
+    padding: 0.2rem;
 }
 
 body.banner > *:not(:is(#connecting-banner, #error-banner)) {
@@ -38,17 +53,80 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
     flex-direction: row;
     justify-content: space-between;
     flex-wrap: wrap;
-    margin: 1rem;
-    padding: 1rem;
+    margin: 0;
+    padding: 0;
+}
 
-    &.running {
+#maincontent {
+    flex: 1 0 60vw;
+    min-width: 60vw;
+    height: 90vh;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    align-content: center;
+
+    text-align: center;
+}
+
+#sidebar {
+    flex: 1 1 min(400px, 100vw);
+    min-height: 100vh;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+
+    > * {
+        width: 100%;
+    }
+}
+
+#history > div {
+    min-width: min(400px, 100vw);
+    max-height: 50vh;
+    overflow-y: scroll;
+}
+
+.history-round {
+    padding: 0.5rem;
+    background: #ddf;
+
+    &:nth-child(odd) {
         background: #eef;
     }
 }
 
-#game-main {
-    flex-basis: 100%;
-    text-align: center;
+
+.history-cards {
+    margin: 0.5rem;
+
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 1rem;
+
+    &> div {
+        padding: 1rem;
+        background: #ccc;
+        border-radius: 0.5rem;
+
+        * {
+            margin: 0;
+        }
+
+        h3 {
+            margin-bottom: 1rem;
+        }
+    }
+}
+
+#players > :is(h2, h3) {
+    padding: 0;
+    margin: 0;
 }
 
 #invite-modal {
@@ -97,21 +175,6 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
     font-weight: bolder;
     font-size: 1.1em;
     cursor: pointer;
-}
-
-.copied-indicator {
-    text-align: center;
-    padding: 0.5rem;
-    background: rgba(200, 200, 220, 0.5);
-    border-radius: 0.5rem;
-    transform: translate(-50%, -50%);
-    user-select: none;
-}
-
-.copied-indicator::after {
-    content: "\a▼";
-    white-space: pre;
-    color: rgba(100, 100, 200);
 }
 
 #nickpicker {
@@ -177,16 +240,15 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
 }
 
 
-#gamesettings:not(.expanded) {
-    height: 0;
-
-    > *:not(legend) {
-        display: none;
-    }
-}
-
-
 #gamesettings {
+    &:not(.expanded) {
+        height: 0;
+
+        > *:not(legend) {
+            display: none;
+        }
+    }
+
     & .emphasize-labels {
         line-height: 150%;
 
@@ -197,11 +259,11 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
             white-space: nowrap;
         }
     }
+    input[type=number] {
+        width: 8ch;
+    }
 }
 
-#gamesettings input[type=number] {
-    width: 8ch;
-}
 
 fieldset {
     margin: 1rem;
@@ -219,4 +281,18 @@ fieldset {
     font-weight: bolder;
     font-size: 1.1em;
     cursor: pointer;
+}
+
+.spoiler {
+    background: black;
+    color: black;
+    display: inline-block;
+    min-width: 20ch;
+    padding: 0.2rem;
+    cursor: pointer;
+    user-select: none;
+
+    &:hover, &.show {
+        color: white !important;
+    }
 }

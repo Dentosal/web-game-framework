@@ -108,7 +108,7 @@ impl Default for GameSettings {
 struct Schelling {
     pub settings: GameSettings,
     pub nicknames: HashMap<PlayerId, String>,
-    pub history: Vec<Round>,
+    pub history: Vec<HistoryRound>,
     pub current_round: Option<Round>,
     pub question_queue: Vec<Question>,
     pub running: bool,
@@ -116,10 +116,54 @@ struct Schelling {
     pub delay: bool,
 }
 
+fn normalize_guess(guess: &str) -> String {
+    guess.trim().to_lowercase()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Round {
     pub question: Question,
     pub guesses: HashMap<PlayerId, String>,
+}
+
+impl Round {
+    fn into_history(self, anonymize: bool) -> HistoryRound {
+        let answers = self.guesses.values().map(|guess| normalize_guess(guess));
+
+        HistoryRound {
+            question: self.question,
+            guesses: if anonymize {
+                let mut answers = answers.map(|a| (a, 0)).collect::<HashMap<_, _>>();
+                for (_, v) in &self.guesses {
+                    *answers.get_mut(&normalize_guess(v)).unwrap() += 1;
+                }
+                RoundGuesses::Anonymized(answers)
+            } else {
+                let mut answers = answers
+                    .map(|a| (a, HashSet::new()))
+                    .collect::<HashMap<_, _>>();
+
+                for (id, v) in self.guesses.into_iter() {
+                    answers.get_mut(&normalize_guess(&v)).unwrap().insert(id);
+                }
+
+                RoundGuesses::Full(answers)
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct HistoryRound {
+    pub question: Question,
+    pub guesses: RoundGuesses,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum RoundGuesses {
+    Anonymized(HashMap<String, usize>),
+    Full(HashMap<String, HashSet<PlayerId>>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,7 +179,7 @@ enum Question {
 struct PublicSchelling {
     pub settings: GameSettings,
     pub nicknames: HashMap<PlayerId, String>,
-    pub history: Vec<Round>,
+    pub history: Vec<HistoryRound>,
     pub current_round: Option<CurrentRoundPublic>,
     pub question_queue: Vec<Question>,
     pub running: bool,
@@ -173,7 +217,8 @@ impl Schelling {
             let percentage_answered = (round.guesses.len() as f32) / (common.players.len() as f32);
             if percentage_answered >= (self.settings.percentage as f32) / 100.0 {
                 // Round is finished
-                self.history.push(round.clone());
+                self.history
+                    .push(round.clone().into_history(self.settings.anonymize));
                 self.current_round = None;
                 self.delay = true;
             }
