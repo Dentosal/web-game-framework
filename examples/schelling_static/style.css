@@ -129,6 +129,38 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
     margin: 0;
 }
 
+#readylist {
+    padding: 1rem;
+    margin: 1rem;
+
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    gap: 0.5rem;
+
+    div {
+        flex: 1;
+        padding: 1rem;
+        border: 1px solid black;
+        background: lightgreen;
+
+        &::after {
+            float: right;
+            content: '✔';
+        }
+
+        &:not(.ready) {
+            background: pink;
+
+            &::after {
+                content: '⧖';
+            }
+        }
+    }
+
+}
+
 #invite-modal {
     min-width: 500px;
     text-align: right;
@@ -267,9 +299,11 @@ body.banner > *:not(:is(#connecting-banner, #error-banner)) {
 
 fieldset {
     margin: 1rem;
+    border-top: 1px solid black;
 
     & > * {
         margin: 0.5rem 0.1rem;
+        padding: 0.5rem;
     }
 }
 

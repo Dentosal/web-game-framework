@@ -8,6 +8,10 @@ const copyToClipboard = elem => {
     }, 1000);
 }
 
+var timerTask = null;
+var delayTask = null;
+
+
 const Page = {
     error: null,
     events: null,
@@ -24,6 +28,8 @@ const Page = {
     leader: null,
     players: [],
     expandSettings: true,
+    timerSeconds: null,
+    delaySeconds: null,
 
     start() {
         this.events = new window.WgfwEvents();
@@ -61,6 +67,7 @@ const Page = {
             this.players = players;
 
             this.updateSettingsWritable();
+            this.updateTimers();
         };
 
         this.events.onerror = err => {
@@ -74,6 +81,45 @@ const Page = {
                 window.location.hash = "";
             }
         };
+    },
+
+    updateTimers() {
+        if (this.state.timer_from !== null) {
+            timerTask = setInterval(() => {
+                let end = new Date(this.state.timer_from + this.state.settings.timer * 1000);
+                let value = Math.round((end - new Date()) / 1000);
+                this.timerSeconds = Math.max(value, 0);
+                if (value > 0) {
+                    this.timerSeconds = value;
+                } else {
+                    this.timerSeconds = null;
+                    clearInterval(timerTask);
+                }
+            }, 1000);
+        } else {
+            if (timerTask !== null) {
+                clearInterval(timerTask);
+            }
+            timerTask = null;
+        }
+
+        if (this.state.delay_from !== null) {
+            delayTask = setInterval(() => {
+                let end = new Date(this.state.delay_from + this.state.settings.delay * 1000);
+                let value = Math.round((end - new Date()) / 1000);
+                if (value > 0) {
+                    this.delaySeconds = value;
+                } else {
+                    this.delaySeconds = null;
+                    clearInterval(delayTask);
+                }
+            }, 1000);
+        } else {
+            if (delayTask !== null) {
+                clearInterval(delayTask);
+            }
+            delayTask = null;
+        }
     },
 
     // Sets game joinId as the active game, leaving all other games.
@@ -121,7 +167,7 @@ const Page = {
 
     async createGame(mode) {
         this.gameId = await this.events.create_game(mode);
-        self.updateNick();
+        this.updateNick();
     },
 
     async trySetNick(nick) {
@@ -169,5 +215,23 @@ const Page = {
     async sendAnswer(elem) {
         await this.events.inner(this.gameId, { guess: elem.value });
         elem.value = "";
+    },
+
+    needsReady() {
+        if (this.state.ready.includes(this.me)) {
+            return false;
+        }
+
+        switch (this.state.settings.ready) {
+            case "all": return true;
+            case "leader": return this.me == this.leader;
+            case "majority": return true;
+            case "any": return true;
+            case "none": return false;
+        }
+    },
+
+    async sendReady() {
+        await this.events.inner(this.gameId, "ready");
     },
 };

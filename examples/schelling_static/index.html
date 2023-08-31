@@ -55,16 +55,19 @@
     </div>
 
     <div id="game" x-show="gameId !== null && myNick !== null" :class="{ running: state.running }">
-        <p x-show="!state.running">
-            Waiting for the leader
-            (<span x-text="leader === me ? 'you' : (state.nicknames ? state.nicknames[leader] : '')"></span>)
-            to start the game.
-        </p>
-        <div x-show="!state.running && leader === me">
-            <input class="leader-action" type="button" value="Start game" @click="await startGame()">
-        </div>
 
         <div id="maincontent">
+            <div x-show="!state.running">
+                <p>
+                    Waiting for the leader
+                    (<span x-text="leader === me ? 'you' : (state.nicknames ? state.nicknames[leader] : '')"></span>)
+                    to start the game.
+                </p>
+                <div x-show="leader === me">
+                    <input class="leader-action" type="button" value="Start game" @click="await startGame()">
+                </div>
+            </div>
+
             <div x-show="state.running">
                 <template x-if="state.current_round">
                     <div id="current-question">
@@ -89,7 +92,7 @@
                     </div>
                 </template>
 
-                <template x-if="state.history.length > 0 && state.delay">
+                <template x-if="state.history.length > 0 && state.delay_from">
                     <template x-for="round of [state.history.at(-1)]">
                         <div>
                             <h2>Round results: <span x-text="round.question.open"></span></h2>
@@ -111,12 +114,28 @@
                                     </template>
                                 </template>
                             </div>
+
+                            <h3>
+                                Waiting for players to be ready:
+                                <span x-text="state.settings.ready"></span>
+                                <span x-show="delaySeconds">(and <span x-text="delaySeconds"></span>s)</span>
+                            </h3>
+                            <input type="button" value="Ready" x-show="needsReady()" @click="await sendReady()"/>
+                            <div id="readylist">
+                                <template x-for="player in players">
+                                    <div
+                                        :key="player"
+                                        :class="{ready: state.ready.includes(player)}"
+                                        x-text="state.nicknames[player] || 'Anonymous'"
+                                    ></div>
+                                </template>
+                            </div>
                         </div>
                     </template>
                 </template>
             </div>
 
-            <div x-show="!state.current_round && !state.delay">
+            <div x-show="!state.current_round && !state.delay_from">
                 <h2>Waiting for new questions</h2>
             </div>
 

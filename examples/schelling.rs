@@ -2,11 +2,12 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use tokio::time::Instant;
 use warp::Filter;
 
 use wgfw::{
@@ -104,16 +105,29 @@ impl Default for GameSettings {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+impl GameSettings {
+    pub fn timer(&self) -> Duration {
+        Duration::from_secs(self.timer as u64)
+    }
+
+    pub fn delay(&self) -> Duration {
+        Duration::from_secs(self.delay as u64)
+    }
+}
+
+#[derive(Debug, Default)]
 struct Schelling {
+    pub running: bool,
     pub settings: GameSettings,
     pub nicknames: HashMap<PlayerId, String>,
     pub history: Vec<HistoryRound>,
     pub current_round: Option<Round>,
+    /// Timer after the current round ends.
+    pub timer_from: Option<Instant>,
     pub question_queue: Vec<Question>,
-    pub running: bool,
-    /// After-the-round delay is active
-    pub delay: bool,
+    pub ready: HashSet<PlayerId>,
+    /// After-the-round delay is active. This is the time last round ended.
+    pub delay_from: Option<Instant>,
 }
 
 fn normalize_guess(guess: &str) -> String {
@@ -177,13 +191,17 @@ enum Question {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PublicSchelling {
+    pub running: bool,
     pub settings: GameSettings,
     pub nicknames: HashMap<PlayerId, String>,
     pub history: Vec<HistoryRound>,
     pub current_round: Option<CurrentRoundPublic>,
     pub question_queue: Vec<Question>,
-    pub running: bool,
-    pub delay: bool,
+    pub ready: HashSet<PlayerId>,
+    #[serde(with = "serde_millis")]
+    pub timer_from: Option<SystemTime>,
+    #[serde(with = "serde_millis")]
+    pub delay_from: Option<SystemTime>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -206,26 +224,68 @@ impl Schelling {
             current_round,
             question_queue: self.question_queue.clone(),
             running: self.running,
-            delay: self.delay,
+            ready: self.ready.clone(),
+            timer_from: self.timer_from.map(|at| (SystemTime::now() - at.elapsed())),
+            delay_from: self.delay_from.map(|at| (SystemTime::now() - at.elapsed())),
         }
     }
 
     /// Advance to the next phase or round, if needed
-    pub fn update(&mut self, common: &GameCommon) {
+    pub fn update(&mut self, common: &GameCommon) -> Updates {
+        let mut updates = Updates::NONE;
+        let now = Instant::now();
+
         // Check if current round is finished
         if let Some(round) = self.current_round.as_ref() {
-            let percentage_answered = (round.guesses.len() as f32) / (common.players.len() as f32);
-            if percentage_answered >= (self.settings.percentage as f32) / 100.0 {
+            if round.guesses.len() < common.players.len()
+                || self
+                    .timer_from
+                    .map(|at| at.elapsed() < self.settings.timer())
+                    .unwrap_or(false)
+            {
+                let percentage_answered =
+                    (round.guesses.len() as f32) / (common.players.len() as f32);
+                if percentage_answered >= (self.settings.percentage as f32) / 100.0 {
+                    if self.timer_from.is_none() {
+                        updates.state_changed = true;
+                        self.timer_from = Some(now);
+                        let _ = updates.add_timeout(now + self.settings.timer());
+                    }
+                }
+            } else {
                 // Round is finished
+                updates.state_changed = true;
                 self.history
                     .push(round.clone().into_history(self.settings.anonymize));
                 self.current_round = None;
-                self.delay = true;
+                self.timer_from = None;
+                self.delay_from = Some(now);
+                let _ = updates.add_timeout(now + self.settings.delay());
             }
         }
 
-        if self.current_round.is_none() && self.running && !self.delay {
-            // Start new round
+        if self.current_round.is_none() && self.running {
+            if let Some(delay) = self.delay_from {
+                let players_ready = match self.settings.ready {
+                    ReadyPermission::All => self.ready.len() == common.players.len(),
+                    ReadyPermission::Leader => self.ready.contains(&common.leader),
+                    ReadyPermission::Majority => self.ready.len() > common.players.len() / 2,
+                    ReadyPermission::Single => !self.ready.is_empty(),
+                    ReadyPermission::No => true,
+                };
+
+                if players_ready && delay.elapsed() >= self.settings.delay() {
+                    updates.state_changed = true;
+                    self.delay_from = None;
+                    self.ready.clear();
+                } else {
+                    return updates;
+                }
+            }
+
+            updates.state_changed = true;
+
+            // Start new round if needed
             let mut rng = rand::thread_rng();
             if self.question_queue.is_empty() {
                 // Pick a random question from the list if any are enabled
@@ -248,6 +308,8 @@ impl Schelling {
                 });
             }
         }
+
+        updates
     }
 }
 
@@ -263,6 +325,8 @@ enum UserMessage {
     Question(Question),
     /// Guess the answer to the current question
     Guess(String),
+    /// Ready to start the next round
+    Ready,
     /// Start or unpause the game
     Start,
     /// Pause the game
@@ -285,9 +349,7 @@ impl Game for Schelling {
     }
 
     fn on_event(&mut self, common: &GameCommon, _id: EventId) -> Updates {
-        self.delay = false;
-        self.update(common);
-        Updates::CHANGED
+        self.update(common)
     }
 
     fn on_message_from(
@@ -297,15 +359,15 @@ impl Game for Schelling {
         message: serde_json::Value,
     ) -> (Updates, Result<serde_json::Value, serde_json::Value>) {
         if let Ok(msg) = serde_json::from_value(message) {
-            let had_delay_before = self.delay;
-
-            match msg {
+            let updates = match msg {
                 UserMessage::Nick(name) => {
                     self.nicknames.insert(player, name);
+                    Updates::CHANGED
                 }
                 UserMessage::Settings(settings) => {
                     if player == common.leader {
                         self.settings = settings;
+                        Updates::CHANGED
                     } else {
                         return (Updates::NONE, Err("Only leader can change settings".into()));
                     }
@@ -329,32 +391,40 @@ impl Game for Schelling {
                         }
                     }
                     self.question_queue.push(question);
-                    self.update(common);
+                    Updates::CHANGED
                 }
                 UserMessage::Guess(guess) => {
                     self.current_round.as_mut().map(|round| {
                         round.guesses.insert(player, guess);
                     });
-                    self.update(common);
+                    Updates::CHANGED
+                }
+                UserMessage::Ready => {
+                    if self.ready.insert(player) {
+                        Updates::CHANGED
+                    } else {
+                        Updates::NONE
+                    }
                 }
                 UserMessage::Start => {
                     if player == common.leader {
                         self.running = true;
+                        Updates::CHANGED
                     } else {
                         return (Updates::NONE, Err("Only leader can start the game".into()));
                     }
-                    self.update(common);
                 }
                 UserMessage::Pause => {
                     if player == common.leader {
                         self.running = false;
+                        Updates::CHANGED
                     } else {
                         return (Updates::NONE, Err("Only leader can pause the game".into()));
                     }
                 }
                 UserMessage::Advance => {
                     if player == common.leader {
-                        self.update(common);
+                        Updates::CHANGED
                     } else {
                         return (
                             Updates::NONE,
@@ -362,13 +432,9 @@ impl Game for Schelling {
                         );
                     }
                 }
-            }
+            };
 
-            let mut updates = Updates::CHANGED;
-            if !had_delay_before && self.delay {
-                let _ = updates.add_timeout(Duration::from_secs(self.settings.delay as u64));
-            }
-            (updates, Ok(().into()))
+            (updates.merge(self.update(common)), Ok(().into()))
         } else {
             (Updates::NONE, Err("Invalid message!!".into()))
         }

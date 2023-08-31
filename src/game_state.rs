@@ -1,4 +1,4 @@
-use std::{collections::HashSet, time::Duration};
+use std::collections::HashSet;
 
 use tokio::time::Instant;
 use uuid::Uuid;
@@ -21,7 +21,7 @@ pub struct Updates {
     /// Broadcast new state to all players
     pub state_changed: bool,
     /// Schedule timer-delayed events
-    pub events: Vec<(Duration, EventId)>,
+    pub events: Vec<(Instant, EventId)>,
 }
 impl Updates {
     pub const CHANGED: Self = Self::new(true);
@@ -34,9 +34,15 @@ impl Updates {
         }
     }
 
-    pub fn add_timeout(&mut self, delay: Duration) -> EventId {
+    pub fn merge(mut self, other: Self) -> Self {
+        self.state_changed |= other.state_changed;
+        self.events.extend(other.events);
+        self
+    }
+
+    pub fn add_timeout(&mut self, at: Instant) -> EventId {
         let id = EventId::new();
-        self.events.push((delay, id));
+        self.events.push((at, id));
         id
     }
 
@@ -64,8 +70,8 @@ impl Updates {
         game_id: GameId,
         scheduled: &mut EventQueue<(GameId, EventId)>,
     ) -> bool {
-        for (delay, event_id) in self.events {
-            scheduled.add((game_id, event_id), Instant::now() + delay);
+        for (at, event_id) in self.events {
+            scheduled.add((game_id, event_id), at);
         }
 
         self.state_changed
