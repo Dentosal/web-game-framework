@@ -226,8 +226,8 @@ const Page = {
             case "all": return true;
             case "leader": return this.me == this.leader;
             case "majority": return true;
-            case "any": return true;
-            case "none": return false;
+            case "single": return true;
+            case "no": return false;
         }
     },
 

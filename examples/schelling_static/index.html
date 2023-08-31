@@ -180,7 +180,7 @@
             <div id="history" x-show="state.history.length > 0">
                 <h2>Game log</h2>
                 <div>
-                    <template x-for="round of state.history.reverse()">
+                    <template x-for="round of state.history.slice().reverse()">
                         <div class="history-round">
                             <h2 x-text="round.question.open"></h2>
                             <div class="history-cards">
@@ -236,7 +236,7 @@
                     <ul>
                         <template x-for="list in state.settings.question_lists">
                             <li>
-                                <label><input type="checkbox" x-model="list.enabled"><span x-text="list.name || list.url"></span></label>
+                                <label><input type="checkbox" x-model="list.enabled"><span x-text="list.name"></span></label>
                             </li>
                         </template>
                     </ul>

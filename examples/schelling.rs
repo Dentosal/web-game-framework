@@ -2,6 +2,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    path::PathBuf,
     time::{Duration, SystemTime},
 };
 
@@ -40,10 +41,32 @@ enum ReadyPermission {
 #[serde(rename_all = "snake_case")]
 struct QuestionList {
     enabled: bool,
-    url: String,
     name: String,
-    #[serde(skip)]
-    cached: Option<Vec<String>>,
+    path: String,
+}
+
+impl QuestionList {
+    pub fn read(&self) -> Result<Vec<String>, std::io::Error> {
+        let path = std::fs::canonicalize(&self.path)?;
+
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("examples/schelling_static");
+
+        if !path.starts_with(d) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Path is not inside the static directory",
+            ));
+        }
+
+        let contents = std::fs::read(&self.path)?;
+        Ok(String::from_utf8(contents)
+            .expect("Invalid utf-8")
+            .lines()
+            .map(|line| line.trim().to_owned())
+            .filter(|line| !line.is_empty())
+            .collect())
+    }
 }
 
 /// List of predefined questions
@@ -86,15 +109,13 @@ impl Default for GameSettings {
             question_lists: vec![
                 QuestionList {
                     enabled: false,
-                    url: "/static/lists/chatgpt_en.txt".to_owned(),
                     name: "ChatGPT-generated questions (English)".to_owned(),
-                    cached: None,
+                    path: "./examples/schelling_static/lists/chatgpt_en.txt".to_owned(),
                 },
                 QuestionList {
                     enabled: false,
-                    url: "/static/lists/chatgpt_fi.txt".to_owned(),
                     name: "ChatGPT-generated questions (Finnish)".to_owned(),
-                    cached: None,
+                    path: "./examples/schelling_static/lists/chatgpt_fi.txt".to_owned(),
                 },
             ],
             order: QuestionOrder::default(),
@@ -180,7 +201,7 @@ enum RoundGuesses {
     Full(HashMap<String, HashSet<PlayerId>>),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Question {
     /// Unlimitted possible answers
@@ -288,13 +309,31 @@ impl Schelling {
             // Start new round if needed
             let mut rng = rand::thread_rng();
             if self.question_queue.is_empty() {
-                // Pick a random question from the list if any are enabled
-                // TODO
-                // let mut enabled_lists = self
-                //     .settings
-                //     .question_lists
-                //     .iter()
-                //     .filter(|list| list.enabled);
+                // Pick a random question from a list if any enabled
+                let mut questions: Vec<_> = self
+                    .settings
+                    .question_lists
+                    .iter_mut()
+                    .filter(|list| list.enabled)
+                    .map(|list| list.read().expect("Failed to read")) // TODO: handle errors instead
+                    .flatten()
+                    .collect();
+
+                while !questions.is_empty() {
+                    let i = rng.gen_range(0..questions.len());
+                    let question = questions.swap_remove(i);
+                    let question = Question::Open(question.to_owned());
+                    // Reroll if the question was already asked
+                    if self.history.iter().any(|round| round.question == question) {
+                        continue;
+                    }
+
+                    self.current_round = Some(Round {
+                        question,
+                        guesses: HashMap::new(),
+                    });
+                    break;
+                }
             } else {
                 // Pick from proposal queue if it's not empty
                 let i = match self.settings.order {
