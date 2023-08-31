@@ -51,7 +51,15 @@ impl Builder {
         let Self { registry } = self;
         let (jh, game_server_handle) = game_server::spawn(registry);
 
-        let wasm = warp::path("wasm").and(warp::fs::dir("./wasm/pkg/"));
+        let wasm_bg = warp::path("wasm")
+            .and(warp::path("wgfw_wasm_bg.wasm"))
+            .map(|| warp::reply::with_header(WASM_BG, "content-type", "application/wasm"));
+
+        let wasm_js = warp::path("wasm")
+            .and(warp::path("wgfw_wasm.js"))
+            .map(|| warp::reply::with_header(WASM_JS, "content-type", "text/javascript"));
+
+        let wasm = wasm_bg.or(wasm_js);
 
         let ws = warp::path("ws")
             .and(warp::ws())
@@ -69,3 +77,13 @@ fn with_game_server(
         .and(warp::addr::remote())
         .map(move |remote_addr: Option<SocketAddr>| handle.make_client_handle(remote_addr.unwrap()))
 }
+
+// WASM pkg files compiled by build.rs
+static WASM_BG: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/wasm/pkg/wgfw_wasm_bg.wasm"
+));
+static WASM_JS: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/wasm/pkg/wgfw_wasm.js"
+));

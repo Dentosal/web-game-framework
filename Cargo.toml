@@ -21,8 +21,3 @@ log = "0.4"
 secrets = "1.2"
 uuid = { version = "1.4", features = ["v4", "serde"] }
 orion = { version = "0.17", features = ["serde"] }
-
-# Examples
-serde_millis = "0.1.1"
-rand = "0.8"
-reqwest = { version = "0.11" }
