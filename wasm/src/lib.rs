@@ -45,20 +45,17 @@ pub struct WgfwEvents {
 impl WgfwEvents {
     #[wasm_bindgen(constructor)]
     pub fn new() -> WgfwEvents {
-        let ws_url = match web_sys::window()
-            .expect("No window object")
-            .location()
-            .protocol()
-            .expect("No protocol")
-            .as_str()
-        {
-            "https:" => "wss:///ws",
-            _ => "ws:///ws",
+        let wl = web_sys::window().expect("No window object").location();
+        let ws_proto = match wl.protocol().expect("No protocol").as_str() {
+            "https:" => "wss://",
+            _ => "ws://",
         };
+
+        let ws_url = format!("{}{}/ws", ws_proto, wl.host().expect("No host"));
 
         // Connect to an echo server
         let self_ = Self {
-            ws: WebSocket::new(ws_url).expect("failed to open ws"),
+            ws: WebSocket::new(&ws_url).expect("failed to open ws"),
             reply_callbacks: Arc::default(),
             onready: Arc::default(),
             onerror: Arc::default(),
